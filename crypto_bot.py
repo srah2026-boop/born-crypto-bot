@@ -3,17 +3,15 @@ from telebot import types
 import requests
 import os
 
-# Configurare Date
 TOKEN = os.environ.get("TOKEN")
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN)
 
-# Dicționar Master (Engleza e Baza)
 strings = {
     'en': {
-        'start': "🚀 *Born Crypto Bot v2.0*\nYour professional trading suite. Select language:",
+        'start': "🚀 *Born Crypto Bot v2.0*\nSelect language:",
         'main': "🏠 *Main Menu*",
-        'free': "📊 Live Prices (Binance)",
+        'free': "📊 Live Prices",
         'defi': "🛡️ DeFi Analysis",
         'audit': "🔍 Contract Audit",
         'premium': "💎 PREMIUM SERVICES",
@@ -23,17 +21,15 @@ strings = {
         'pay': "💳 Subscribe Now (Stripe)",
         'back': "⬅️ Back",
         'lang': "🌐 Language / Limba",
-        'price_info': "Enter a coin symbol (e.g., BTC, ETH, SOL) to get the live Binance price:",
-        'defi_info': "🛡️ *DeFi Analysis Tool*\nReal-time monitoring of DEX liquidity pools and TVL. Upgrade to Premium for deep-scan alerts.",
-        'audit_info': "🔍 *Smart Contract Audit*\nScanning for Honeypots and Mint functions. Paste a contract address to start (Premium only).",
-        'promo_sig': "🎯 *Daily Signals*\nGet the Top 3 high-probability trades every morning with TP/SL.",
-        'promo_wha': "🐋 *Whale Tracker*\nTrack $1M+ movements between wallets and exchanges in real-time.",
-        'promo_gem': "💎 *Early Gems*\nDiscover micro-cap tokens with 100x potential before they hit CEXs."
+        'premium_intro': "🌟 *BORN CRYPTO PREMIUM*\n\nAccess our exclusive tools:\n• Professional Trading Signals\n• Real-time Whale Alerts\n• Early DEX Gems\n\n👇 *Click below to get instant access:*",
+        'promo_sig': "🎯 *Premium Signals*\nTop 3 coins daily with Entry/Exit points.",
+        'promo_wha': "🐋 *Whale Tracker*\nReal-time alerts for $1M+ moves.",
+        'promo_gem': "💎 *Early Gems*\n100x potential tokens on Uniswap."
     },
     'ro': {
-        'start': "🚀 *Born Crypto Bot v2.0*\nAsistentul tău profesional. Selectează limba:",
+        'start': "🚀 *Born Crypto Bot v2.0*\nSelectează limba:",
         'main': "🏠 *Meniu Principal*",
-        'free': "📊 Prețuri Live (Binance)",
+        'free': "📊 Prețuri Live",
         'defi': "🛡️ Analiză DeFi",
         'audit': "🔍 Audit Contracte",
         'premium': "💎 SERVICII PREMIUM",
@@ -43,12 +39,10 @@ strings = {
         'pay': "💳 Abonează-te (Stripe)",
         'back': "⬅️ Înapoi",
         'lang': "🌐 Schimbă Limba",
-        'price_info': "Introdu simbolul monedei (ex: BTC, ETH) pentru prețul Binance live:",
-        'defi_info': "🛡️ *Analiză DeFi*\nMonitorizare bazine lichiditate și TVL. Treci la Premium pentru alerte avansate.",
-        'audit_info': "🔍 *Audit Contract*\nScanare Honeypot și funcții Mint. Introdu adresa contractului (Doar Premium).",
-        'promo_sig': "🎯 *Semnale Zilnice*\nTop 3 tranzacții cu probabilitate mare în fiecare dimineață.",
-        'promo_wha': "🐋 *Whale Tracker*\nUrmărește mișcările de 1M$+ între portofele și burse.",
-        'promo_gem': "💎 *Early Gems*\nDescoperă proiecte noi cu potențial de 100x pe DEX-uri."
+        'premium_intro': "🌟 *BORN CRYPTO PREMIUM*\n\nAccesează uneltele noastre exclusive:\n• Semnale profesionale de trading\n• Alerte de balene în timp real\n• Gem-uri timpurii pe DEX-uri\n\n👇 *Apasă mai jos pentru acces instant:*",
+        'promo_sig': "🎯 *Semnale PREMIUM*\nTop 3 monede cu puncte de intrare.",
+        'promo_wha': "🐋 *Whale Tracker*\nMișcări de peste 1M$.",
+        'promo_gem': "💎 *Early Gems*\nMonede cu potențial de 100x."
     }
 }
 
@@ -56,7 +50,7 @@ user_lang = {}
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_lang[message.chat.id] = 'en' # Start obligatoriu în Engleză
+    user_lang[message.chat.id] = 'en'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
     bot.send_message(message.chat.id, strings['en']['start'], reply_markup=markup, parse_mode="Markdown")
@@ -78,31 +72,26 @@ def router(message):
 
     # Navigare Meniu Principal
     elif "📊" in text:
-        bot.send_message(message.chat.id, strings[lang]['price_info'])
+        bot.send_message(message.chat.id, "Enter coin symbol (BTC, ETH):")
     elif "🛡️" in text:
-        bot.send_message(message.chat.id, strings[lang]['defi_info'], parse_mode="Markdown")
+        bot.send_message(message.chat.id, strings[lang]['defi_info'] if 'defi_info' in strings[lang] else "DeFi Scan active.")
     elif "🔍" in text:
-        bot.send_message(message.chat.id, strings[lang]['audit_info'], parse_mode="Markdown")
+        bot.send_message(message.chat.id, strings[lang]['audit_info'] if 'audit_info' in strings[lang] else "Audit Scan active.")
+    
+    # CLICK PE PREMIUM (Acum trimite și link-ul de Stripe)
     elif "💎 PREMIUM" in text or "💎 SERVICII" in text:
-        show_premium(message)
+        show_premium_and_pay(message)
 
-    # Logica Premium (Paywall)
+    # Logica Sub-Meniu Premium (Paywall)
     elif any(emoji in text for emoji in ["📈", "🐳", "💎"]) and "PREMIUM" not in text and "SERVICII" not in text:
         show_paywall(message, text)
 
-    # Înapoi
     elif "⬅️" in text:
         show_main(message)
 
-    # Prețuri Live Binance
+    # Prețuri Binance
     elif len(text) <= 8 and not text.startswith('/'):
-        symbol = text.upper().strip() + "USDT"
-        try:
-            r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}").json()
-            price = f"{float(r['price']):,.2f}"
-            bot.send_message(message.chat.id, f"🚀 *{text.upper()}* Live: `${price}`\n_Source: Binance_", parse_mode="Markdown")
-        except:
-            pass 
+        get_price(message)
 
 def show_main(message):
     lang = user_lang.get(message.chat.id, 'en')
@@ -112,12 +101,23 @@ def show_main(message):
     markup.row(strings[lang]['lang'])
     bot.send_message(message.chat.id, strings[lang]['main'], reply_markup=markup, parse_mode="Markdown")
 
-def show_premium(message):
+def show_premium_and_pay(message):
     lang = user_lang.get(message.chat.id, 'en')
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(strings[lang]['signals'], strings[lang]['whale'])
-    markup.row(strings[lang]['gems'], strings[lang]['back'])
-    bot.send_message(message.chat.id, "💎 *Premium Control Panel*", reply_markup=markup, parse_mode="Markdown")
+    
+    # 1. Schimbăm tastatura de jos
+    markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup_reply.row(strings[lang]['signals'], strings[lang]['whale'])
+    markup_reply.row(strings[lang]['gems'], strings[lang]['back'])
+    
+    # 2. Creăm butonul Inline de Stripe
+    markup_inline = types.InlineKeyboardMarkup()
+    markup_inline.add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
+    
+    # 3. Trimitem mesajul cu butonul de plată
+    bot.send_message(message.chat.id, strings[lang]['premium_intro'], 
+                     reply_markup=markup_reply, parse_mode="Markdown")
+    bot.send_message(message.chat.id, "👇 *Secure Payment Link:*", 
+                     reply_markup=markup_inline, parse_mode="Markdown")
 
 def show_paywall(message, btn_text):
     lang = user_lang.get(message.chat.id, 'en')
@@ -129,6 +129,15 @@ def show_paywall(message, btn_text):
     else: promo = strings[lang]['promo_gem']
     
     bot.send_message(message.chat.id, promo, reply_markup=markup, parse_mode="Markdown")
+
+def get_price(message):
+    symbol = message.text.upper().strip() + "USDT"
+    try:
+        r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}").json()
+        price = f"{float(r['price']):,.2f}"
+        bot.send_message(message.chat.id, f"🚀 *{message.text.upper()}*: `${price}`", parse_mode="Markdown")
+    except:
+        pass
 
 if __name__ == "__main__":
     bot.infinity_polling()
