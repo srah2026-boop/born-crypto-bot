@@ -7,12 +7,13 @@ import time
 import threading
 from datetime import datetime, timedelta
 
-# Configurare Initiala
+# --- Configurare Initiala ---
 TOKEN = os.environ.get("TOKEN")
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 TRIALS_FILE = "trials_data.json"
+user_state = {} # Pentru a urmari daca asteptam o adresa de la user
 
 def load_trials():
     if os.path.exists(TRIALS_FILE):
@@ -33,14 +34,32 @@ def save_trials(trials):
 user_trial_start = load_trials()
 user_lang = {}
 
+# --- FUNCTIE ANALIZA SECURITATE (GoPlus API) ---
+def get_security_data(address):
+    address = address.strip().lower()
+    # Incercam pe retelele principale (1 = ETH, 56 = BSC)
+    for net_id in ["1", "56"]:
+        try:
+            url = f"https://api.goplussecurity.io/api/v1/token_security/{net_id}?contract_addresses={address}"
+            res = requests.get(url, timeout=10).json()
+            if res.get('code') == 1 and address in res.get('result', {}):
+                data = res['result'][address]
+                return {
+                    "hp": "DA 🚨" if data.get("is_honeypot") == "1" else "NU ✅",
+                    "bt": f"{float(data.get('buy_tax', 0))*100:.1f}%",
+                    "st": f"{float(data.get('sell_tax', 0))*100:.1f}%",
+                    "lp": "DA ✅" if data.get("lp_locked") == "1" else "NU ⚠️",
+                    "ow": "Renounced ✅" if data.get("owner_address") in ["0x0000000000000000000000000000000000000000", ""] else "Active ⚠️"
+                }
+        except: continue
+    return None
+
 # --- FUNCTIE PENTRU MESAJE AUTOMATE (FOLLOW-UP) ---
 def send_marketing_followup(chat_id, lang):
-    time.sleep(120) # Asteapta 120 de secunde (2 minute)
+    time.sleep(120)
     text = {
         'en': "🚀 Want better crypto signals?\n\n*Upgrade to Premium:*\n✅ Real-time alerts\n✅ Whale tracking\n✅ Early gems\n\n💰 Only 10€/month",
-        'ro': "🚀 Vrei semnale crypto mai bune?\n\n*Treci la Premium:*\n✅ Alerte în timp real\n✅ Urmărire Balene\n✅ Early gems\n\n💰 Doar 10€/lună",
-        'de': "🚀 Wollen Sie bessere Krypto-Signale?\n\n*Upgrade auf Premium:*",
-        'fr': "🚀 Vous voulez de meilleurs signaux crypto?\n\n*Passer la Premium:*"
+        'ro': "🚀 Vrei semnale crypto mai bune?\n\n*Treci la Premium:*\n✅ Alerte în timp real\n✅ Urmărire Balene\n✅ Early gems\n\n💰 Doar 10€/lună"
     }
     markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 Upgrade Now", url=STRIPE_PAYMENT_LINK))
     try:
@@ -57,8 +76,8 @@ def get_top_signals():
         price_dict = {item['symbol']: float(item['price']) for item in prices if item['symbol'] in symbols}
         for sym in symbols:
             if sym in price_dict:
-                price = price_dict[sym]; entry = price; target = price * 1.025
-                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{entry:.2f}`\nTarget: `{target:.2f}`\n")
+                price = price_dict[sym]
+                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{price:.2f}`\nTarget: `{price * 1.025:.2f}`\n")
         return "\n".join(results)
     except: return "❌ Market data unavailable."
 
@@ -77,30 +96,45 @@ def router(message):
     uid = message.chat.id
     text = message.text
 
+    # Setare Limba
     if "English" in text: user_lang[uid] = 'en'; show_main(message); return
     if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
-    if "Deutsch" in text: user_lang[uid] = 'de'; show_main(message); return
-    if "Français" in text: user_lang[uid] = 'fr'; show_main(message); return
-
+    
     lang = user_lang.get(uid, 'en')
 
-    # Porneste thread-ul de follow-up (o singura data pe sesiune de interactiune)
-    if text in ["📊 Semnale Free", "📊 Free Signals"]:
-        threading.Thread(target=send_marketing_followup, args=(uid, lang)).start()
+    # --- LOGICA PROCESARE ADRESA (Audit/DeFi) ---
+    if user_state.get(uid) == "waiting_addr":
+        if text.startswith("0x") and len(text) > 30:
+            bot.send_message(uid, "⌛ " + ("Analyzing security..." if lang == 'en' else "Analizăm securitatea..."))
+            data = get_security_data(text)
+            if data:
+                res = f"🔍 *Audit:* `{text[:10]}...`\n\nHoneypot: {data['hp']}\nTaxe: {data['bt']}/{data['st']}\nLP: {data['lp']}\nOwner: {data['ow']}"
+                bot.send_message(uid, res, parse_mode="Markdown")
+            else:
+                bot.send_message(uid, "❌ " + ("Contract not found on ETH/BSC." if lang == 'en' else "Contractul nu a fost găsit."))
+        else:
+            bot.send_message(uid, "❌ " + ("Invalid address." if lang == 'en' else "Adresă invalidă."))
+        user_state[uid] = None # Resetam starea
+        return
 
-    # Logica de Trial & Navigare (Păstrată din versiunea anterioară)
+    # --- NAVIGARE MENIU ---
     if "📊" in text: 
         bot.send_message(uid, "⌛ _Fetching market data..._", parse_mode="Markdown")
         signals = get_top_signals()
         header = "🆓 *LIVE TOP SIGNALS*\n\n" if lang == 'en' else "🆓 *SEMNALE LIVE TOP*\n\n"
         bot.send_message(uid, header + signals, parse_mode="Markdown")
+        threading.Thread(target=send_marketing_followup, args=(uid, lang)).start()
+
     elif "🛡️" in text or "🔍" in text:
-        bot.send_message(uid, "🛰️ " + ("Paste address:" if lang == 'en' else "Trimite adresa:"))
+        user_state[uid] = "waiting_addr"
+        msg = "🛰️ Paste address (ETH/BSC):" if lang == 'en' else "🛰️ Trimite adresa contractului (ETH/BSC):"
+        bot.send_message(uid, msg)
+
     elif "💎" in text: show_premium(message)
     elif "⬅️" in text: show_main(message)
     elif "🌐" in text: start(message)
     elif any(x in text for x in ["📈", "🐳", "🔥", "💎 Early"]):
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="Pay", url=STRIPE_PAYMENT_LINK))
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="Upgrade", url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, "🔒 Premium feature!", reply_markup=markup)
 
 def show_main(message):
@@ -124,6 +158,4 @@ def show_premium(message):
 if __name__ == "__main__":
     try: bot.remove_webhook()
     except: pass
-    while True:
-        try: bot.polling(none_stop=True, interval=0, timeout=20)
-        except Exception: time.sleep(5)
+    bot.polling(none_stop=True)
