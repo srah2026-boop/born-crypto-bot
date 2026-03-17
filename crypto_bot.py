@@ -3,6 +3,7 @@ from telebot import types
 import requests
 import os
 import json
+import time
 from datetime import datetime, timedelta
 
 # Preluare TOKEN
@@ -10,7 +11,7 @@ TOKEN = os.environ.get("TOKEN")
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN)
 
-# Fișier pentru salvarea trial-urilor (ca să nu expire la restart)
+# Fișier pentru salvarea trial-urilor
 TRIALS_FILE = "trials_data.json"
 
 def load_trials():
@@ -18,16 +19,16 @@ def load_trials():
         try:
             with open(TRIALS_FILE, "r") as f:
                 data = json.load(f)
-                # Convertim string-urile înapoi în obiecte datetime
                 return {int(k): datetime.fromisoformat(v) for k, v in data.items()}
         except: return {}
     return {}
 
 def save_trials(trials):
-    with open(TRIALS_FILE, "w") as f:
-        # Convertim datetime în string pentru JSON
-        data = {str(k): v.isoformat() for k, v in trials.items()}
-        json.dump(data, f)
+    try:
+        with open(TRIALS_FILE, "w") as f:
+            data = {str(k): v.isoformat() for k, v in trials.items()}
+            json.dump(data, f)
+    except: pass
 
 # Inițializare date
 user_trial_start = load_trials()
@@ -89,7 +90,6 @@ def is_trial_active(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     uid = message.chat.id
-    # La /start resetăm trialul DOAR dacă nu există deja, sau îl lăsăm așa
     if uid not in user_trial_start:
         user_trial_start[uid] = datetime.now()
         save_trials(user_trial_start)
@@ -187,9 +187,11 @@ def get_price(message):
     except: pass
 
 if __name__ == "__main__":
-    try:
-        bot.remove_webhook()
-        print("Sesiuni curatate. Botul porneste...")
-        bot.infinity_polling(skip_pending=True, timeout=60)
-    except Exception as e:
-        print(f"Eroare: {e}")
+    while True:
+        try:
+            bot.remove_webhook()
+            print("Sesiuni curatate. Botul porneste...")
+            bot.infinity_polling(skip_pending=True, timeout=60)
+        except Exception as e:
+            print(f"Conflict detectat: {e}. Reincercare in 5 secunde...")
+            time.sleep(5)
