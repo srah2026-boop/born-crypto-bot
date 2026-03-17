@@ -7,169 +7,113 @@ import time
 import threading
 from datetime import datetime, timedelta
 
-# --- Configurare Initiala ---
+# --- CONFIGURARE ---
 TOKEN = os.environ.get("TOKEN")
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-TRIALS_FILE = "trials_data.json"
-user_state = {} 
+user_state = {}
 user_lang = {}
 
-# --- FUNCTII SALVARE/INCARCARE TRIAL ---
-def load_trials():
-    if os.path.exists(TRIALS_FILE):
-        try:
-            with open(TRIALS_FILE, "r") as f:
-                data = json.load(f)
-                return {int(k): datetime.fromisoformat(v) for k, v in data.items()}
-        except: return {}
-    return {}
-
-def save_trials(trials):
-    try:
-        with open(TRIALS_FILE, "w") as f:
-            data = {str(k): v.isoformat() for k, v in trials.items()}
-            json.dump(data, f)
-    except: pass
-
-user_trial_start = load_trials()
-
-# --- FUNCTIE PRET TOKEN (DexScreener API) ---
-def get_token_price(address):
-    try:
-        url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
-        res = requests.get(url, timeout=5).json()
-        if res.get('pairs'):
-            pair = res['pairs'][0]
-            return f"${pair.get('priceUsd', '0.00')}"
-    except: pass
-    return "N/A"
-
-# --- FUNCTIE ANALIZA SECURITATE (GoPlus API) ---
+# --- MOTORUL DE ANALIZĂ (ULTRA-STABIL) ---
 def get_security_data(address):
     address = address.strip().lower()
+    # Header-e de browser real (Chrome pe Windows)
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Origin": "https://goplussecurity.io",
+        "Referer": "https://goplussecurity.io/"
     }
-    
-    # Incercam pe BSC (56) apoi pe ETH (1)
+
+    # Verificăm ambele rețele (BSC - 56, ETH - 1)
     for net_id in ["56", "1"]:
         try:
             url = f"https://api.goplussecurity.io/api/v1/token_security/{net_id}?contract_addresses={address}"
-            response = requests.get(url, headers=headers, timeout=10)
-            res_data = response.json()
-            
-            if res_data.get('code') == 1 and res_data.get('result') and address in res_data['result']:
-                data = res_data['result'][address]
-                price = get_token_price(address)
-                return {
-                    "price": price,
-                    "hp": "DA 🚨" if str(data.get("is_honeypot")) == "1" else "NU ✅",
-                    "bt": f"{float(data.get('buy_tax', 0))*100:.1f}%",
-                    "st": f"{float(data.get('sell_tax', 0))*100:.1f}%",
-                    "lp": "DA ✅" if str(data.get("lp_locked")) == "1" or str(data.get("lp_hold_confirm")) == "1" else "NU ⚠️",
-                    "ow": "Renounced ✅" if data.get("owner_address") in ["0x0000000000000000000000000000000000000000", ""] or not data.get("owner_address") else "Active ⚠️"
-                }
-        except: continue
+            # Încercăm de 2 ori dacă prima dată eșuează
+            for attempt in range(2):
+                response = requests.get(url, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    if res_json.get('code') == 1 and res_json.get('result'):
+                        # Căutăm adresa indiferent de litere mari/mici
+                        result_data = None
+                        for key in res_json['result']:
+                            if key.lower() == address:
+                                result_data = res_json['result'][key]
+                                break
+                        
+                        if result_data:
+                            # Calculăm prețul via DexScreener
+                            price = "N/A"
+                            try:
+                                p_req = requests.get(f"https://api.dexscreener.com/latest/dex/tokens/{address}", timeout=5).json()
+                                if p_req.get('pairs'):
+                                    price = f"${p_req['pairs'][0].get('priceUsd', '0.00')}"
+                            except: pass
+
+                            return {
+                                "price": price,
+                                "hp": "DA 🚨" if str(result_data.get("is_honeypot")) == "1" else "NU ✅",
+                                "bt": f"{float(result_data.get('buy_tax', 0))*100:.1f}%",
+                                "st": f"{float(result_data.get('sell_tax', 0))*100:.1f}%",
+                                "lp": "DA ✅" if str(result_data.get("lp_locked")) == "1" or str(result_data.get("lp_hold_confirm")) == "1" else "NU ⚠️",
+                                "ow": "Renounced ✅" if result_data.get("owner_address") in ["0x0000000000000000000000000000000000000000", ""] or not result_data.get("owner_address") else "Active ⚠️"
+                            }
+                time.sleep(1) # Mică pauză între reîncercări
+        except Exception as e:
+            print(f"Network error on net {net_id}: {e}")
+            continue
     return None
-
-# --- MARKETING FOLLOW-UP ---
-def send_marketing_followup(chat_id, lang):
-    time.sleep(120)
-    text = {
-        'en': "🚀 Want better crypto signals?\n\n*Upgrade to Premium:*\n✅ Real-time alerts\n✅ Whale tracking\n✅ Early gems\n\n💰 Only 10€/month",
-        'ro': "🚀 Vrei semnale crypto mai bune?\n\n*Treci la Premium:*\n✅ Alerte în timp real\n✅ Urmărire Balene\n✅ Early gems\n\n💰 Doar 10€/lună"
-    }
-    markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 Upgrade Now", url=STRIPE_PAYMENT_LINK))
-    try:
-        bot.send_message(chat_id, text.get(lang, 'en'), reply_markup=markup, parse_mode="Markdown")
-    except: pass
-
-# --- TOP SIGNALS (Binance) ---
-def get_top_signals():
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
-    results = []
-    try:
-        url = "https://api.binance.com/api/v3/ticker/price"
-        prices = requests.get(url, timeout=5).json()
-        price_dict = {item['symbol']: float(item['price']) for item in prices if item['symbol'] in symbols}
-        for sym in symbols:
-            if sym in price_dict:
-                p = price_dict[sym]
-                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{p:.2f}`\nTarget: `{p * 1.025:.2f}`\n")
-        return "\n".join(results)
-    except: return "❌ Market data unavailable."
 
 # --- HANDLERS ---
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    uid = message.chat.id
-    if uid not in user_trial_start:
-        user_trial_start[uid] = datetime.now()
-        save_trials(user_trial_start)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
-    bot.send_message(uid, "🚀 *Born Crypto Bot v2.0*", reply_markup=markup, parse_mode="Markdown")
+    markup.add("🇬🇧 English", "🇷🇴 Română")
+    bot.send_message(message.chat.id, "🚀 *Born Crypto Bot v2.0*", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
     uid = message.chat.id
     text = message.text
-    lang = user_lang.get(uid, 'en')
+    lang = user_lang.get(uid, 'ro')
 
     if "English" in text: user_lang[uid] = 'en'; show_main(message); return
     if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
 
-    # --- LOGICA AUDIT / DEFI ---
+    # --- LOGICA PROCESARE ADRESĂ ---
     if user_state.get(uid) == "waiting_addr":
-        if text.startswith("0x"):
-            bot.send_message(uid, "⌛ " + ("Analyzing..." if lang == 'en' else "Analizăm..."))
+        if text.startswith("0x") and len(text) > 30:
+            bot.send_message(uid, "⌛ " + ("Analyzing security..." if lang == 'en' else "Analizăm securitatea..."))
             data = get_security_data(text)
             if data:
-                res = (f"🛡️ *REZULTAT AUDIT*\n`{text[:12]}...`\n\n"
-                       f"💰 Pret Actual: `{data['price']}`\n"
+                res = (f"🛡️ *RAPORT COMPLET*\n`{text[:14]}...`\n\n"
+                       f"💰 Pret: `{data['price']}`\n"
                        f"🚨 Honeypot: {data['hp']}\n"
                        f"💸 Taxe: {data['bt']} / {data['st']}\n"
                        f"🔒 LP Locked: {data['lp']}\n"
                        f"👑 Owner: {data['ow']}")
                 bot.send_message(uid, res, parse_mode="Markdown")
             else:
-                bot.send_message(uid, "❌ Contract not found (ETH/BSC).")
+                bot.send_message(uid, "❌ Not Found. Asigură-te că e ETH sau BSC.")
         user_state[uid] = None
         return
 
-    # --- BUTOANE MENIU ---
-    if "📊" in text:
-        signals = get_top_signals()
-        bot.send_message(uid, "🆓 *TOP SIGNALS*\n\n" + signals, parse_mode="Markdown")
-        threading.Thread(target=send_marketing_followup, args=(uid, lang)).start()
-    
-    elif "🛡️" in text or "🔍" in text:
+    # --- MENIU ---
+    if "🛡️" in text or "🔍" in text:
         user_state[uid] = "waiting_addr"
-        bot.send_message(uid, "🛰️ " + ("Paste address (ETH/BSC):" if lang == 'en' else "Trimite adresa contractului (ETH/BSC):"))
+        bot.send_message(uid, "🛰️ " + ("Paste address:" if lang == 'en' else "Trimite adresa:"))
     
-    elif "💎" in text: show_premium(message)
-    elif "⬅️" in text: show_main(message)
-    elif "🌐" in text: start(message)
+    elif "📊" in text:
+        bot.send_message(uid, "📈 *Generăm semnale...*") # Pune aici logica de Binance
 
 def show_main(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("📊 Free Signals", "💎 PREMIUM")
+    markup.row("📊 Semnale Free", "💎 PREMIUM")
     markup.row("🛡️ DeFi Analysis", "🔍 Contract Audit")
-    markup.row("🌐 Language")
-    bot.send_message(message.chat.id, "🏠 *Main Menu*", reply_markup=markup, parse_mode="Markdown")
-
-def show_premium(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("📈 5x Signals", "🐳 Whale Alerts")
-    markup.row("💎 Early Gems", "🔥 Gainers")
-    markup.row("⬅️ Back")
-    bot.send_message(message.chat.id, "💎 *PREMIUM*", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, "🏠 *Meniu*", reply_markup=markup, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    try: bot.remove_webhook()
-    except: pass
     bot.polling(none_stop=True)
