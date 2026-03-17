@@ -13,7 +13,8 @@ STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 TRIALS_FILE = "trials_data.json"
-user_state = {} # Pentru a urmari daca asteptam o adresa de la user
+user_state = {} 
+user_lang = {}
 
 def load_trials():
     if os.path.exists(TRIALS_FILE):
@@ -32,19 +33,30 @@ def save_trials(trials):
     except: pass
 
 user_trial_start = load_trials()
-user_lang = {}
+
+# --- FUNCTIE PRET TOKEN (DexScreener API) ---
+def get_token_price(address):
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
+        res = requests.get(url, timeout=5).json()
+        if res.get('pairs'):
+            pair = res['pairs'][0]
+            return f"${pair.get('priceUsd', '0.00')}"
+    except: pass
+    return "N/A"
 
 # --- FUNCTIE ANALIZA SECURITATE (GoPlus API) ---
 def get_security_data(address):
     address = address.strip().lower()
-    # Incercam pe retelele principale (1 = ETH, 56 = BSC)
-    for net_id in ["1", "56"]:
+    for net_id in ["1", "56"]: # 1=ETH, 56=BSC
         try:
             url = f"https://api.goplussecurity.io/api/v1/token_security/{net_id}?contract_addresses={address}"
             res = requests.get(url, timeout=10).json()
             if res.get('code') == 1 and address in res.get('result', {}):
                 data = res['result'][address]
+                price = get_token_price(address)
                 return {
+                    "price": price,
                     "hp": "DA 🚨" if data.get("is_honeypot") == "1" else "NU ✅",
                     "bt": f"{float(data.get('buy_tax', 0))*100:.1f}%",
                     "st": f"{float(data.get('sell_tax', 0))*100:.1f}%",
@@ -54,7 +66,7 @@ def get_security_data(address):
         except: continue
     return None
 
-# --- FUNCTIE PENTRU MESAJE AUTOMATE (FOLLOW-UP) ---
+# --- MARKETING FOLLOW-UP ---
 def send_marketing_followup(chat_id, lang):
     time.sleep(120)
     text = {
@@ -63,10 +75,10 @@ def send_marketing_followup(chat_id, lang):
     }
     markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 Upgrade Now", url=STRIPE_PAYMENT_LINK))
     try:
-        bot.send_message(chat_id, text.get(lang, text['en']), reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(chat_id, text.get(lang, 'en'), reply_markup=markup, parse_mode="Markdown")
     except: pass
 
-# --- FUNCTIE PENTRU TOP MONEDE (Binance Live) ---
+# --- TOP SIGNALS (Binance) ---
 def get_top_signals():
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
     results = []
@@ -76,8 +88,8 @@ def get_top_signals():
         price_dict = {item['symbol']: float(item['price']) for item in prices if item['symbol'] in symbols}
         for sym in symbols:
             if sym in price_dict:
-                price = price_dict[sym]
-                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{price:.2f}`\nTarget: `{price * 1.025:.2f}`\n")
+                p = price_dict[sym]
+                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{p:.2f}`\nTarget: `{p * 1.025:.2f}`\n")
         return "\n".join(results)
     except: return "❌ Market data unavailable."
 
@@ -89,56 +101,50 @@ def start(message):
         save_trials(user_trial_start)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
-    bot.send_message(uid, "🚀 *Born Crypto Bot v2.0*\nSelect language:", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(uid, "🚀 *Born Crypto Bot v2.0*", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
     uid = message.chat.id
     text = message.text
-
-    # Setare Limba
-    if "English" in text: user_lang[uid] = 'en'; show_main(message); return
-    if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
-    
     lang = user_lang.get(uid, 'en')
 
-    # --- LOGICA PROCESARE ADRESA (Audit/DeFi) ---
+    if "English" in text: user_lang[uid] = 'en'; show_main(message); return
+    if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
+
+    # --- LOGICA AUDIT CU PRET ---
     if user_state.get(uid) == "waiting_addr":
-        if text.startswith("0x") and len(text) > 30:
-            bot.send_message(uid, "⌛ " + ("Analyzing security..." if lang == 'en' else "Analizăm securitatea..."))
+        if text.startswith("0x"):
+            bot.send_message(uid, "⌛ " + ("Analyzing..." if lang == 'en' else "Analizăm..."))
             data = get_security_data(text)
             if data:
-                res = f"🔍 *Audit:* `{text[:10]}...`\n\nHoneypot: {data['hp']}\nTaxe: {data['bt']}/{data['st']}\nLP: {data['lp']}\nOwner: {data['ow']}"
+                res = (f"🔍 *Audit:* `{text[:10]}...`\n"
+                       f"💰 *Current Price:* `{data['price']}`\n\n"
+                       f"Honeypot: {data['hp']}\n"
+                       f"Taxe: {data['bt']}/{data['st']}\n"
+                       f"LP: {data['lp']}\n"
+                       f"Owner: {data['ow']}")
                 bot.send_message(uid, res, parse_mode="Markdown")
             else:
-                bot.send_message(uid, "❌ " + ("Contract not found on ETH/BSC." if lang == 'en' else "Contractul nu a fost găsit."))
-        else:
-            bot.send_message(uid, "❌ " + ("Invalid address." if lang == 'en' else "Adresă invalidă."))
-        user_state[uid] = None # Resetam starea
+                bot.send_message(uid, "❌ Contract not found.")
+        user_state[uid] = None
         return
 
-    # --- NAVIGARE MENIU ---
-    if "📊" in text: 
-        bot.send_message(uid, "⌛ _Fetching market data..._", parse_mode="Markdown")
+    # --- MENIU ---
+    if "📊" in text:
         signals = get_top_signals()
-        header = "🆓 *LIVE TOP SIGNALS*\n\n" if lang == 'en' else "🆓 *SEMNALE LIVE TOP*\n\n"
-        bot.send_message(uid, header + signals, parse_mode="Markdown")
+        bot.send_message(uid, "🆓 *TOP SIGNALS*\n\n" + signals, parse_mode="Markdown")
         threading.Thread(target=send_marketing_followup, args=(uid, lang)).start()
-
+    
     elif "🛡️" in text or "🔍" in text:
         user_state[uid] = "waiting_addr"
-        msg = "🛰️ Paste address (ETH/BSC):" if lang == 'en' else "🛰️ Trimite adresa contractului (ETH/BSC):"
-        bot.send_message(uid, msg)
-
+        bot.send_message(uid, "🛰️ " + ("Paste address (ETH/BSC):" if lang == 'en' else "Trimite adresa contractului (ETH/BSC):"))
+    
     elif "💎" in text: show_premium(message)
     elif "⬅️" in text: show_main(message)
     elif "🌐" in text: start(message)
-    elif any(x in text for x in ["📈", "🐳", "🔥", "💎 Early"]):
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="Upgrade", url=STRIPE_PAYMENT_LINK))
-        bot.send_message(uid, "🔒 Premium feature!", reply_markup=markup)
 
 def show_main(message):
-    lang = user_lang.get(message.chat.id, 'en')
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📊 Free Signals", "💎 PREMIUM")
     markup.row("🛡️ DeFi Analysis", "🔍 Contract Audit")
@@ -146,14 +152,11 @@ def show_main(message):
     bot.send_message(message.chat.id, "🏠 *Main Menu*", reply_markup=markup, parse_mode="Markdown")
 
 def show_premium(message):
-    lang = user_lang.get(message.chat.id, 'en')
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📈 5x Signals", "🐳 Whale Alerts")
     markup.row("💎 Early Gems", "🔥 Gainers")
     markup.row("⬅️ Back")
-    pay_btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💳 Buy Now 10€", url=STRIPE_PAYMENT_LINK))
-    bot.send_message(message.chat.id, "💎 *PREMIUM SERVICES*", reply_markup=markup, parse_mode="Markdown")
-    bot.send_message(message.chat.id, "Get full access here:", reply_markup=pay_btn)
+    bot.send_message(message.chat.id, "💎 *PREMIUM*", reply_markup=markup, parse_mode="Markdown")
 
 if __name__ == "__main__":
     try: bot.remove_webhook()
