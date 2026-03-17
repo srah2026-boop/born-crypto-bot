@@ -30,18 +30,27 @@ def save_trials(trials):
     except: pass
 
 user_trial_start = load_trials()
-user_state = {}
 user_lang = {}
 
-# --- FUNCTIE PRETURI REALE (Binance API) ---
-def get_crypto_price(symbol):
+# --- FUNCTIE PENTRU TOP MONEDE (Binance Live) ---
+def get_top_signals():
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+    results = []
     try:
-        symbol = symbol.upper().replace("/", "").replace(" ", "")
-        if "USDT" not in symbol: symbol += "USDT"
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        res = requests.get(url, timeout=5).json()
-        return float(res['price'])
-    except: return None
+        url = "https://api.binance.com/api/v3/ticker/price"
+        prices = requests.get(url, timeout=5).json()
+        price_dict = {item['symbol']: float(item['price']) for item in prices if item['symbol'] in symbols}
+        
+        for sym in symbols:
+            if sym in price_dict:
+                price = price_dict[sym]
+                entry = price
+                target = price * 1.025 # +2.5% Profit
+                name = sym.replace("USDT", "")
+                results.append(f"🔸 **{name}**\nEntry: `{entry:.2f}`\nTarget: `{target:.2f}`\n")
+        return "\n".join(results)
+    except:
+        return "❌ Market data temporarily unavailable."
 
 # --- FUNCTIE ANALIZA REALA (GoPlus Security API) ---
 def get_security_data(address):
@@ -73,8 +82,7 @@ strings = {
         'lang': "🌐 Language",
         'trial_expired': "🚨 *Trial expired!*",
         'ask_address': "🛰️ Paste Contract Address:",
-        'ask_symbol': "🔍 Type coin symbol (e.g. BTC, ETH, SOL):",
-        'signal_template': "🆓 *LIVE SIGNAL*\n\n**Token:** {sym}/USDT\n**ENTRY:** {entry}\n**TARGET:** {target}\n**STATUS:** 🟢 Active (Real-time)",
+        'free_header': "🆓 *LIVE TOP SIGNALS*\n\n",
         'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTax: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
         'prem_lock': "🔒 *PREMIUM FEATURE*\nThis feature is only for Premium members."
     },
@@ -89,8 +97,7 @@ strings = {
         'lang': "🌐 Schimbă Limba",
         'trial_expired': "🚨 *Trial expirat!*",
         'ask_address': "🛰️ Trimite adresa contractului:",
-        'ask_symbol': "🔍 Introdu simbolul monedei (ex: BTC, ETH, SOL):",
-        'signal_template': "🆓 *SEMNAL LIVE*\n\n**Token:** {sym}/USDT\n**INTRARE:** {entry}\n**TARGET:** {target}\n**STATUS:** 🟢 Activ (Real-time)",
+        'free_header': "🆓 *SEMNALE LIVE TOP MONEDE*\n\n",
         'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTaxe: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
         'prem_lock': "🔒 *FUNCȚIE PREMIUM*\nAceastă opțiune este disponibilă doar membrilor Premium."
     }
@@ -131,36 +138,15 @@ def router(message):
         bot.send_message(uid, strings[lang]['trial_expired'], reply_markup=markup, parse_mode="Markdown")
         return
 
-    # LOGICA SEMNALE DINAMICE
-    if user_state.get(uid) == "waiting_symbol":
-        price = get_crypto_price(text)
-        if price:
-            target = price * 1.03
-            res = strings[lang]['signal_template'].format(sym=text.upper(), entry=round(price, 4), target=round(target, 4))
-            bot.send_message(uid, res, parse_mode="Markdown")
-        else:
-            bot.send_message(uid, "❌ Coin not found. Try BTC, ETH, SOL.")
-        user_state[uid] = None
-        return
-
-    # LOGICA AUDIT
-    if user_state.get(uid) == "waiting_addr":
-        bot.send_message(uid, "⌛ Analizăm...")
-        data = get_security_data(text)
-        if data:
-            res = strings[lang]['audit_res'].format(addr=text[:10]+"...", hp=data['honeypot'], bt=data['buy_tax'], st=data['sell_tax'], lp=data['lp_locked'], ow=data['owner'])
-            bot.send_message(uid, res, parse_mode="Markdown")
-        else:
-            bot.send_message(uid, "❌ Error. Use ETH/BSC addresses.")
-        user_state[uid] = None
-        return
-
+    # LOGICA SEMNALE TOP AUTOMATE
     if "📊" in text: 
-        user_state[uid] = "waiting_symbol"
-        bot.send_message(uid, strings[lang]['ask_symbol'])
+        bot.send_message(uid, "⌛ _Fetching market data..._", parse_mode="Markdown")
+        signals = get_top_signals()
+        bot.send_message(uid, strings[lang]['free_header'] + signals, parse_mode="Markdown")
+
     elif "🛡️" in text or "🔍" in text:
-        user_state[uid] = "waiting_addr"
         bot.send_message(uid, strings[lang]['ask_address'])
+
     elif "💎" in text: show_premium(message)
     elif "⬅️" in text: show_main(message)
     elif "🌐" in text: start(message)
