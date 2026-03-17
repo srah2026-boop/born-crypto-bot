@@ -1,28 +1,35 @@
 import telebot
 import requests
+import os
 
-# TOKEN-UL TAU
-TOKEN = "7829595779:AAH7-vH_XjJmH9XG_mE_Z9_m_m_m_m" 
+# Luăm token-ul direct din setările Koyeb (Environment Variables)
+TOKEN = os.environ.get("TOKEN")
 bot = telebot.TeleBot(TOKEN)
+
+def get_crypto_price(coin):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
+    try:
+        response = requests.get(url).json()
+        if coin in response:
+            return response[coin]['usd']
+        return None
+    except Exception as e:
+        print(f"Eroare la API: {e}")
+        return None
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    item1 = telebot.types.KeyboardButton("📈 LIVE PRICES")
-    item2 = telebot.types.KeyboardButton("🔍 RUG-CHECK")
-    markup.add(item1, item2)
-    bot.send_message(message.chat.id, "🚀 BORN CRYPTO LIVE PE KOYEB!\n\nAlege o functie:", reply_markup=markup)
+    bot.reply_to(message, "Salut! Sunt botul tău crypto. Trimite-mi numele unei monede (ex: bitcoin, ethereum) și îți zic prețul.")
 
 @bot.message_handler(func=lambda message: True)
-def handle_menu(message):
-    if message.text == "📈 LIVE PRICES":
-        try:
-            res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT")
-            pret = float(res.json()['price'])
-            bot.reply_to(message, f"📊 Bitcoin (BTC): ${pret:,.2f}")
-        except:
-            bot.reply_to(message, "⚠️ Eroare API Binance.")
+def echo_all(message):
+    coin = message.text.lower().strip()
+    price = get_crypto_price(coin)
+    if price:
+        bot.reply_to(message, f"Prețul pentru {coin.capitalize()} este: ${price}")
+    else:
+        bot.reply_to(message, "Nu am găsit moneda asta. Încearcă 'bitcoin' sau 'ethereum'.")
 
 if __name__ == "__main__":
-    print("Botul a pornit pe Koyeb...")
-    bot.polling(none_stop=True)
+    print("Botul a pornit...")
+    bot.infinity_polling()
