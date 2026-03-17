@@ -4,11 +4,17 @@ import requests
 import os
 from datetime import datetime, timedelta
 
+# Preluare TOKEN din Koyeb
 TOKEN = os.environ.get("TOKEN")
-STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
-bot = telebot.TeleBot(TOKEN)
 
-# Stocare Trial (User ID: Data Start)
+if not TOKEN:
+    print("EROARE: Variabila TOKEN nu este setata in Koyeb!")
+else:
+    bot = telebot.TeleBot(TOKEN)
+
+STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
+
+# Stocare date
 user_trial_start = {}
 user_state = {}
 user_lang = {}
@@ -57,21 +63,17 @@ strings['de'] = strings['en'].copy()
 strings['fr'] = strings['en'].copy()
 
 def is_trial_active(user_id):
-    # DACĂ USERUL NU ESTE ÎN LISTĂ, ÎL ADĂUGĂM ACUM (IMPORTANT!)
     if user_id not in user_trial_start:
         user_trial_start[user_id] = datetime.now()
         return True
-    
-    # Verificare 3 zile
-    start_time = user_trial_start[user_id]
-    if datetime.now() > start_time + timedelta(days=3):
+    if datetime.now() > user_trial_start[user_id] + timedelta(days=3):
         return False
     return True
 
 @bot.message_handler(commands=['start'])
 def start(message):
     uid = message.chat.id
-    user_trial_start[uid] = datetime.now() # Resetăm trial la fiecare /start pentru siguranță
+    user_trial_start[uid] = datetime.now()
     user_lang[uid] = 'en'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
@@ -82,7 +84,6 @@ def router(message):
     uid = message.chat.id
     text = message.text
     
-    # 1. Schimbare Limbă
     if any(l in text for l in ["English", "Deutsch", "Français"]):
         user_lang[uid] = 'en'
         show_main(message)
@@ -92,7 +93,6 @@ def router(message):
         show_main(message)
         return
 
-    # 2. Verificare Trial
     if not is_trial_active(uid):
         lang = user_lang.get(uid, 'en')
         markup = types.InlineKeyboardMarkup()
@@ -102,7 +102,6 @@ def router(message):
 
     lang = user_lang.get(uid, 'en')
 
-    # 3. Logică Audit/DeFi
     if user_state.get(uid) == "waiting_audit" and len(text) > 15:
         bot.send_message(uid, strings[lang]['audit_result'].format(addr=text), parse_mode="Markdown")
         user_state[uid] = None
@@ -112,7 +111,6 @@ def router(message):
         user_state[uid] = None
         return
 
-    # 4. Meniu Principal & Butoane
     if "📊" in text:
         bot.send_message(uid, strings[lang]['free_signal'], parse_mode="Markdown")
     elif "🛡️" in text:
@@ -149,7 +147,6 @@ def show_premium(message):
     
     inline_pay = types.InlineKeyboardMarkup()
     inline_pay.add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
-    
     bot.send_message(message.chat.id, strings[lang]['premium_info'], reply_markup=markup, parse_mode="Markdown")
     bot.send_message(message.chat.id, "🚀 *Smarter Trades Today:*", reply_markup=inline_pay, parse_mode="Markdown")
 
@@ -162,7 +159,6 @@ def show_paywall(message, btn_text):
     elif "🐳" in btn_text: info = "🐋 *WHALE ALERTS*\nReal-time monitoring of $1M+ moves."
     elif "🔥" in btn_text: info = "🔥 *TOP GAINERS*\nInstant data on market leaders."
     else: info = "💎 *EARLY TOKENS*\nFind gems before they go mainstream."
-    
     bot.send_message(message.chat.id, info, reply_markup=markup, parse_mode="Markdown")
 
 def get_price(message):
@@ -174,4 +170,5 @@ def get_price(message):
 
 if __name__ == "__main__":
     bot.remove_webhook()
+    print("Botul a pornit...")
     bot.infinity_polling(skip_pending=True)
