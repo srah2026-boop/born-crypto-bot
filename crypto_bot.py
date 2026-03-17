@@ -34,36 +34,43 @@ def save_trials(trials):
 
 user_trial_start = load_trials()
 
-# --- FUNCTIE PRET TOKEN (DexScreener API) ---
+# --- FUNCTIE PRET TOKEN (DexScreener) ---
 def get_token_price(address):
     try:
         url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
         res = requests.get(url, timeout=5).json()
         if res.get('pairs'):
-            pair = res['pairs'][0]
-            return f"${pair.get('priceUsd', '0.00')}"
+            # Luam prima pereche care are pretul in USD
+            for pair in res['pairs']:
+                if 'priceUsd' in pair:
+                    return f"${pair['priceUsd']}"
     except: pass
     return "N/A"
 
-# --- FUNCTIE ANALIZA SECURITATE (GoPlus API) ---
+# --- FUNCTIE ANALIZA SECURITATE (GoPlus) ---
 def get_security_data(address):
     address = address.strip().lower()
-    for net_id in ["1", "56"]: # 1=ETH, 56=BSC
+    # Incercam pe BSC (56) si ETH (1)
+    for net_id in ["56", "1"]:
         try:
             url = f"https://api.goplussecurity.io/api/v1/token_security/{net_id}?contract_addresses={address}"
-            res = requests.get(url, timeout=10).json()
-            if res.get('code') == 1 and address in res.get('result', {}):
-                data = res['result'][address]
+            response = requests.get(url, timeout=10)
+            res_data = response.json()
+            
+            if res_data.get('code') == 1 and address in res_data.get('result', {}):
+                data = res_data['result'][address]
                 price = get_token_price(address)
                 return {
                     "price": price,
                     "hp": "DA 🚨" if data.get("is_honeypot") == "1" else "NU ✅",
                     "bt": f"{float(data.get('buy_tax', 0))*100:.1f}%",
                     "st": f"{float(data.get('sell_tax', 0))*100:.1f}%",
-                    "lp": "DA ✅" if data.get("lp_locked") == "1" else "NU ⚠️",
-                    "ow": "Renounced ✅" if data.get("owner_address") in ["0x0000000000000000000000000000000000000000", ""] else "Active ⚠️"
+                    "lp": "DA ✅" if data.get("lp_locked") == "1" or data.get("lp_hold_confirm") == "1" else "NU ⚠️",
+                    "ow": "Renounced ✅" if data.get("owner_address") in ["0x0000000000000000000000000000000000000000", ""] or not data.get("owner_address") else "Active ⚠️"
                 }
-        except: continue
+        except Exception as e:
+            print(f"Error checking net {net_id}: {e}")
+            continue
     return None
 
 # --- MARKETING FOLLOW-UP ---
@@ -112,21 +119,21 @@ def router(message):
     if "English" in text: user_lang[uid] = 'en'; show_main(message); return
     if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
 
-    # --- LOGICA AUDIT CU PRET ---
+    # --- LOGICA AUDIT ---
     if user_state.get(uid) == "waiting_addr":
         if text.startswith("0x"):
             bot.send_message(uid, "⌛ " + ("Analyzing..." if lang == 'en' else "Analizăm..."))
             data = get_security_data(text)
             if data:
                 res = (f"🔍 *Audit:* `{text[:10]}...`\n"
-                       f"💰 *Current Price:* `{data['price']}`\n\n"
+                       f"💰 *Price:* `{data['price']}`\n\n"
                        f"Honeypot: {data['hp']}\n"
                        f"Taxe: {data['bt']}/{data['st']}\n"
                        f"LP: {data['lp']}\n"
                        f"Owner: {data['ow']}")
                 bot.send_message(uid, res, parse_mode="Markdown")
             else:
-                bot.send_message(uid, "❌ Contract not found.")
+                bot.send_message(uid, "❌ Contract not found on ETH/BSC. Make sure the address is correct.")
         user_state[uid] = None
         return
 
