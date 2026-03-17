@@ -11,6 +11,7 @@ bot = telebot.TeleBot(TOKEN)
 # Stocare Trial (User ID: Data Start)
 user_trial_start = {}
 user_state = {}
+user_lang = {}
 
 strings = {
     'en': {
@@ -52,26 +53,29 @@ strings = {
     }
 }
 
-# Traduceri de bază pentru DE/FR (router-ul le va trimite la main)
 strings['de'] = strings['en'].copy()
 strings['fr'] = strings['en'].copy()
 
 def is_trial_active(user_id):
+    # DACĂ USERUL NU ESTE ÎN LISTĂ, ÎL ADĂUGĂM ACUM (IMPORTANT!)
     if user_id not in user_trial_start:
         user_trial_start[user_id] = datetime.now()
         return True
+    
     # Verificare 3 zile
-    if datetime.now() > user_trial_start[user_id] + timedelta(days=3):
+    start_time = user_trial_start[user_id]
+    if datetime.now() > start_time + timedelta(days=3):
         return False
     return True
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_trial_start[message.chat.id] = datetime.now() # Reset trial la start pentru test
-    user_lang[message.chat.id] = 'en'
+    uid = message.chat.id
+    user_trial_start[uid] = datetime.now() # Resetăm trial la fiecare /start pentru siguranță
+    user_lang[uid] = 'en'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
-    bot.send_message(message.chat.id, strings['en']['start'], reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(uid, strings['en']['start'], reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -79,7 +83,7 @@ def router(message):
     text = message.text
     
     # 1. Schimbare Limbă
-    if "English" in text or "Deutsch" in text or "Français" in text:
+    if any(l in text for l in ["English", "Deutsch", "Français"]):
         user_lang[uid] = 'en'
         show_main(message)
         return
@@ -88,7 +92,7 @@ def router(message):
         show_main(message)
         return
 
-    # 2. Verificare Trial (Blochează doar dacă au trecut 3 zile de la /start)
+    # 2. Verificare Trial
     if not is_trial_active(uid):
         lang = user_lang.get(uid, 'en')
         markup = types.InlineKeyboardMarkup()
@@ -98,7 +102,7 @@ def router(message):
 
     lang = user_lang.get(uid, 'en')
 
-    # 3. Logică Audit/DeFi (Introducere adrese)
+    # 3. Logică Audit/DeFi
     if user_state.get(uid) == "waiting_audit" and len(text) > 15:
         bot.send_message(uid, strings[lang]['audit_result'].format(addr=text), parse_mode="Markdown")
         user_state[uid] = None
@@ -108,7 +112,7 @@ def router(message):
         user_state[uid] = None
         return
 
-    # 4. Meniu Principal
+    # 4. Meniu Principal & Butoane
     if "📊" in text:
         bot.send_message(uid, strings[lang]['free_signal'], parse_mode="Markdown")
     elif "🛡️" in text:
@@ -121,8 +125,10 @@ def router(message):
         show_premium(message)
     elif any(emoji in text for emoji in ["📈", "🐳", "💎", "🔥"]) and "⬅️" not in text:
         show_paywall(message, text)
-    elif "⬅️" in text: show_main(message)
-    elif "🌐" in text: start(message)
+    elif "⬅️" in text:
+        show_main(message)
+    elif "🌐" in text:
+        start(message)
     elif len(text) <= 8 and not text.startswith('/'):
         get_price(message)
 
