@@ -33,6 +33,16 @@ user_trial_start = load_trials()
 user_state = {}
 user_lang = {}
 
+# --- FUNCTIE PRETURI REALE (Binance API) ---
+def get_crypto_price(symbol):
+    try:
+        symbol = symbol.upper().replace("/", "").replace(" ", "")
+        if "USDT" not in symbol: symbol += "USDT"
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        res = requests.get(url, timeout=5).json()
+        return float(res['price'])
+    except: return None
+
 # --- FUNCTIE ANALIZA REALA (GoPlus Security API) ---
 def get_security_data(address):
     try:
@@ -41,7 +51,6 @@ def get_security_data(address):
         if res.get('code') != 1:
             url = f"https://api.goplussecurity.io/api/v1/token_security/56?contract_addresses={address}"
             res = requests.get(url, timeout=10).json()
-        
         data = res['result'][address.lower()]
         return {
             "honeypot": "DA 🚨" if data.get("is_honeypot") == "1" else "NU ✅",
@@ -64,9 +73,10 @@ strings = {
         'lang': "🌐 Language",
         'trial_expired': "🚨 *Trial expired!*",
         'ask_address': "🛰️ Paste Contract Address:",
-        'free_msg': "🆓 *FREE SIGNAL*\n\n**Token:** BTC/USDT\n**ENTRY:** 67000\n**TARGET:** 69500\n**STATUS:** ✅ Completed",
+        'ask_symbol': "🔍 Type coin symbol (e.g. BTC, ETH, SOL):",
+        'signal_template': "🆓 *LIVE SIGNAL*\n\n**Token:** {sym}/USDT\n**ENTRY:** {entry}\n**TARGET:** {target}\n**STATUS:** 🟢 Active (Real-time)",
         'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTax: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
-        'prem_lock': "🔒 *PREMIUM FEATURE*\nThis feature is only for Premium members. Click below to join!"
+        'prem_lock': "🔒 *PREMIUM FEATURE*\nThis feature is only for Premium members."
     },
     'ro': {
         'start': "🚀 *Born Crypto Bot v2.0*\nSelectează limba:",
@@ -79,9 +89,10 @@ strings = {
         'lang': "🌐 Schimbă Limba",
         'trial_expired': "🚨 *Trial expirat!*",
         'ask_address': "🛰️ Trimite adresa contractului:",
-        'free_msg': "🆓 *SEMNAL GRATUIT*\n\n**Token:** BTC/USDT\n**INTRARE:** 67000\n**TARGET:** 69500\n**STATUS:** ✅ Finalizat",
+        'ask_symbol': "🔍 Introdu simbolul monedei (ex: BTC, ETH, SOL):",
+        'signal_template': "🆓 *SEMNAL LIVE*\n\n**Token:** {sym}/USDT\n**INTRARE:** {entry}\n**TARGET:** {target}\n**STATUS:** 🟢 Activ (Real-time)",
         'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTaxe: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
-        'prem_lock': "🔒 *FUNCȚIE PREMIUM*\nAceastă opțiune este disponibilă doar membrilor Premium. Apasă butonul de mai jos!"
+        'prem_lock': "🔒 *FUNCȚIE PREMIUM*\nAceastă opțiune este disponibilă doar membrilor Premium."
     }
 }
 strings['de'] = strings['en'].copy(); strings['fr'] = strings['en'].copy()
@@ -108,7 +119,6 @@ def router(message):
     uid = message.chat.id
     text = message.text
 
-    # Gestionare Limbi
     if "English" in text: user_lang[uid] = 'en'; show_main(message); return
     if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
     if "Deutsch" in text: user_lang[uid] = 'de'; show_main(message); return
@@ -116,13 +126,24 @@ def router(message):
 
     lang = user_lang.get(uid, 'en')
 
-    # Verificare Trial
     if not is_trial_active(uid):
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, strings[lang]['trial_expired'], reply_markup=markup, parse_mode="Markdown")
         return
 
-    # Logica Audit Real
+    # LOGICA SEMNALE DINAMICE
+    if user_state.get(uid) == "waiting_symbol":
+        price = get_crypto_price(text)
+        if price:
+            target = price * 1.03
+            res = strings[lang]['signal_template'].format(sym=text.upper(), entry=round(price, 4), target=round(target, 4))
+            bot.send_message(uid, res, parse_mode="Markdown")
+        else:
+            bot.send_message(uid, "❌ Coin not found. Try BTC, ETH, SOL.")
+        user_state[uid] = None
+        return
+
+    # LOGICA AUDIT
     if user_state.get(uid) == "waiting_addr":
         bot.send_message(uid, "⌛ Analizăm...")
         data = get_security_data(text)
@@ -134,20 +155,15 @@ def router(message):
         user_state[uid] = None
         return
 
-    # Navigare Meniu Principal
     if "📊" in text: 
-        bot.send_message(uid, strings[lang]['free_msg'], parse_mode="Markdown")
+        user_state[uid] = "waiting_symbol"
+        bot.send_message(uid, strings[lang]['ask_symbol'])
     elif "🛡️" in text or "🔍" in text:
         user_state[uid] = "waiting_addr"
         bot.send_message(uid, strings[lang]['ask_address'])
-    elif "💎" in text: 
-        show_premium(message)
-    elif "⬅️" in text: 
-        show_main(message)
-    elif "🌐" in text: 
-        start(message)
-    
-    # Navigare Meniu Premium (Aici am reparat)
+    elif "💎" in text: show_premium(message)
+    elif "⬅️" in text: show_main(message)
+    elif "🌐" in text: start(message)
     elif any(x in text for x in ["📈", "🐳", "🔥", "💎 Early"]):
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, strings[lang]['prem_lock'], reply_markup=markup, parse_mode="Markdown")
@@ -166,10 +182,9 @@ def show_premium(message):
     markup.row(strings[lang]['signals'], strings[lang]['whale'])
     markup.row(strings[lang]['gems'], strings[lang]['gainers'])
     markup.row(strings[lang]['back'])
-    
     pay_btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
     bot.send_message(message.chat.id, "💎 *BORN CRYPTO PREMIUM*", reply_markup=markup, parse_mode="Markdown")
-    bot.send_message(message.chat.id, "Click below to get instant access:", reply_markup=pay_btn)
+    bot.send_message(message.chat.id, "Click below for instant access:", reply_markup=pay_btn)
 
 if __name__ == "__main__":
     try: bot.remove_webhook()
