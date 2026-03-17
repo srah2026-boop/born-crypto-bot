@@ -65,7 +65,8 @@ strings = {
         'trial_expired': "🚨 *Trial expired!*",
         'ask_address': "🛰️ Paste Contract Address:",
         'free_msg': "🆓 *FREE SIGNAL*\n\n**Token:** BTC/USDT\n**ENTRY:** 67000\n**TARGET:** 69500\n**STATUS:** ✅ Completed",
-        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTax: {bt}/{st}\nLP: {lp}\nOwner: {ow}"
+        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTax: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
+        'prem_lock': "🔒 *PREMIUM FEATURE*\nThis feature is only for Premium members. Click below to join!"
     },
     'ro': {
         'start': "🚀 *Born Crypto Bot v2.0*\nSelectează limba:",
@@ -79,10 +80,10 @@ strings = {
         'trial_expired': "🚨 *Trial expirat!*",
         'ask_address': "🛰️ Trimite adresa contractului:",
         'free_msg': "🆓 *SEMNAL GRATUIT*\n\n**Token:** BTC/USDT\n**INTRARE:** 67000\n**TARGET:** 69500\n**STATUS:** ✅ Finalizat",
-        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTaxe: {bt}/{st}\nLP: {lp}\nOwner: {ow}"
+        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTaxe: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
+        'prem_lock': "🔒 *FUNCȚIE PREMIUM*\nAceastă opțiune este disponibilă doar membrilor Premium. Apasă butonul de mai jos!"
     }
 }
-# Copiem ro/en pentru de/fr rapid
 strings['de'] = strings['en'].copy(); strings['fr'] = strings['en'].copy()
 
 def is_trial_active(user_id):
@@ -107,6 +108,7 @@ def router(message):
     uid = message.chat.id
     text = message.text
 
+    # Gestionare Limbi
     if "English" in text: user_lang[uid] = 'en'; show_main(message); return
     if "Română" in text: user_lang[uid] = 'ro'; show_main(message); return
     if "Deutsch" in text: user_lang[uid] = 'de'; show_main(message); return
@@ -114,11 +116,13 @@ def router(message):
 
     lang = user_lang.get(uid, 'en')
 
+    # Verificare Trial
     if not is_trial_active(uid):
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, strings[lang]['trial_expired'], reply_markup=markup, parse_mode="Markdown")
         return
 
+    # Logica Audit Real
     if user_state.get(uid) == "waiting_addr":
         bot.send_message(uid, "⌛ Analizăm...")
         data = get_security_data(text)
@@ -130,6 +134,7 @@ def router(message):
         user_state[uid] = None
         return
 
+    # Navigare Meniu Principal
     if "📊" in text: 
         bot.send_message(uid, strings[lang]['free_msg'], parse_mode="Markdown")
     elif "🛡️" in text or "🔍" in text:
@@ -141,6 +146,11 @@ def router(message):
         show_main(message)
     elif "🌐" in text: 
         start(message)
+    
+    # Navigare Meniu Premium (Aici am reparat)
+    elif any(x in text for x in ["📈", "🐳", "🔥", "💎 Early"]):
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
+        bot.send_message(uid, strings[lang]['prem_lock'], reply_markup=markup, parse_mode="Markdown")
 
 def show_main(message):
     lang = user_lang.get(message.chat.id, 'en')
@@ -158,8 +168,8 @@ def show_premium(message):
     markup.row(strings[lang]['back'])
     
     pay_btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
-    bot.send_message(message.chat.id, "💎 *PREMIUM MENU*", reply_markup=markup, parse_mode="Markdown")
-    bot.send_message(message.chat.id, "Unlock all features here:", reply_markup=pay_btn)
+    bot.send_message(message.chat.id, "💎 *BORN CRYPTO PREMIUM*", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, "Click below to get instant access:", reply_markup=pay_btn)
 
 if __name__ == "__main__":
     try: bot.remove_webhook()
