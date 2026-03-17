@@ -2,20 +2,35 @@ import telebot
 from telebot import types
 import requests
 import os
+import json
 from datetime import datetime, timedelta
 
-# Preluare TOKEN din Koyeb
+# Preluare TOKEN
 TOKEN = os.environ.get("TOKEN")
-
-if not TOKEN:
-    print("EROARE: Variabila TOKEN nu este setata in Koyeb!")
-else:
-    bot = telebot.TeleBot(TOKEN)
-
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
+bot = telebot.TeleBot(TOKEN)
 
-# Stocare date
-user_trial_start = {}
+# Fișier pentru salvarea trial-urilor (ca să nu expire la restart)
+TRIALS_FILE = "trials_data.json"
+
+def load_trials():
+    if os.path.exists(TRIALS_FILE):
+        try:
+            with open(TRIALS_FILE, "r") as f:
+                data = json.load(f)
+                # Convertim string-urile înapoi în obiecte datetime
+                return {int(k): datetime.fromisoformat(v) for k, v in data.items()}
+        except: return {}
+    return {}
+
+def save_trials(trials):
+    with open(TRIALS_FILE, "w") as f:
+        # Convertim datetime în string pentru JSON
+        data = {str(k): v.isoformat() for k, v in trials.items()}
+        json.dump(data, f)
+
+# Inițializare date
+user_trial_start = load_trials()
 user_state = {}
 user_lang = {}
 
@@ -65,6 +80,7 @@ strings['fr'] = strings['en'].copy()
 def is_trial_active(user_id):
     if user_id not in user_trial_start:
         user_trial_start[user_id] = datetime.now()
+        save_trials(user_trial_start)
         return True
     if datetime.now() > user_trial_start[user_id] + timedelta(days=3):
         return False
@@ -73,7 +89,11 @@ def is_trial_active(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     uid = message.chat.id
-    user_trial_start[uid] = datetime.now()
+    # La /start resetăm trialul DOAR dacă nu există deja, sau îl lăsăm așa
+    if uid not in user_trial_start:
+        user_trial_start[uid] = datetime.now()
+        save_trials(user_trial_start)
+    
     user_lang[uid] = 'en'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
@@ -123,10 +143,8 @@ def router(message):
         show_premium(message)
     elif any(emoji in text for emoji in ["📈", "🐳", "💎", "🔥"]) and "⬅️" not in text:
         show_paywall(message, text)
-    elif "⬅️" in text:
-        show_main(message)
-    elif "🌐" in text:
-        start(message)
+    elif "⬅️" in text: show_main(message)
+    elif "🌐" in text: start(message)
     elif len(text) <= 8 and not text.startswith('/'):
         get_price(message)
 
@@ -169,6 +187,9 @@ def get_price(message):
     except: pass
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    print("Botul a pornit...")
-    bot.infinity_polling(skip_pending=True)
+    try:
+        bot.remove_webhook()
+        print("Sesiuni curatate. Botul porneste...")
+        bot.infinity_polling(skip_pending=True, timeout=60)
+    except Exception as e:
+        print(f"Eroare: {e}")
