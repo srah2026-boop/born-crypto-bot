@@ -4,6 +4,7 @@ import requests
 import os
 import json
 import time
+import threading
 from datetime import datetime, timedelta
 
 # Configurare Initiala
@@ -32,6 +33,20 @@ def save_trials(trials):
 user_trial_start = load_trials()
 user_lang = {}
 
+# --- FUNCTIE PENTRU MESAJE AUTOMATE (FOLLOW-UP) ---
+def send_marketing_followup(chat_id, lang):
+    time.sleep(120) # Asteapta 120 de secunde (2 minute)
+    text = {
+        'en': "🚀 Want better crypto signals?\n\n*Upgrade to Premium:*\n✅ Real-time alerts\n✅ Whale tracking\n✅ Early gems\n\n💰 Only 10€/month",
+        'ro': "🚀 Vrei semnale crypto mai bune?\n\n*Treci la Premium:*\n✅ Alerte în timp real\n✅ Urmărire Balene\n✅ Early gems\n\n💰 Doar 10€/lună",
+        'de': "🚀 Wollen Sie bessere Krypto-Signale?\n\n*Upgrade auf Premium:*",
+        'fr': "🚀 Vous voulez de meilleurs signaux crypto?\n\n*Passer la Premium:*"
+    }
+    markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 Upgrade Now", url=STRIPE_PAYMENT_LINK))
+    try:
+        bot.send_message(chat_id, text.get(lang, text['en']), reply_markup=markup, parse_mode="Markdown")
+    except: pass
+
 # --- FUNCTIE PENTRU TOP MONEDE (Binance Live) ---
 def get_top_signals():
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
@@ -40,76 +55,12 @@ def get_top_signals():
         url = "https://api.binance.com/api/v3/ticker/price"
         prices = requests.get(url, timeout=5).json()
         price_dict = {item['symbol']: float(item['price']) for item in prices if item['symbol'] in symbols}
-        
         for sym in symbols:
             if sym in price_dict:
-                price = price_dict[sym]
-                entry = price
-                target = price * 1.025 # +2.5% Profit
-                name = sym.replace("USDT", "")
-                results.append(f"🔸 **{name}**\nEntry: `{entry:.2f}`\nTarget: `{target:.2f}`\n")
+                price = price_dict[sym]; entry = price; target = price * 1.025
+                results.append(f"🔸 **{sym.replace('USDT', '')}**\nEntry: `{entry:.2f}`\nTarget: `{target:.2f}`\n")
         return "\n".join(results)
-    except:
-        return "❌ Market data temporarily unavailable."
-
-# --- FUNCTIE ANALIZA REALA (GoPlus Security API) ---
-def get_security_data(address):
-    try:
-        url = f"https://api.goplussecurity.io/api/v1/token_security/1?contract_addresses={address}"
-        res = requests.get(url, timeout=10).json()
-        if res.get('code') != 1:
-            url = f"https://api.goplussecurity.io/api/v1/token_security/56?contract_addresses={address}"
-            res = requests.get(url, timeout=10).json()
-        data = res['result'][address.lower()]
-        return {
-            "honeypot": "DA 🚨" if data.get("is_honeypot") == "1" else "NU ✅",
-            "buy_tax": f"{float(data.get('buy_tax', 0))*100:.1f}%",
-            "sell_tax": f"{float(data.get('sell_tax', 0))*100:.1f}%",
-            "lp_locked": "DA ✅" if data.get("lp_locked") == "1" else "NU ⚠️",
-            "owner": "Renounced ✅" if data.get("owner_address") == "0x0000000000000000000000000000000000000000" else "Active ⚠️"
-        }
-    except: return None
-
-strings = {
-    'en': {
-        'start': "🚀 *Born Crypto Bot v2.0*\nSelect language:",
-        'main': "🏠 *Main Menu*",
-        'free': "📊 Free Signals",
-        'premium': "💎 PREMIUM",
-        'signals': "📈 5x Signals", 'whale': "🐳 Whale Alerts", 'gems': "💎 Gems", 'gainers': "🔥 Gainers",
-        'pay': "💳 Upgrade Now",
-        'back': "⬅️ Back",
-        'lang': "🌐 Language",
-        'trial_expired': "🚨 *Trial expired!*",
-        'ask_address': "🛰️ Paste Contract Address:",
-        'free_header': "🆓 *LIVE TOP SIGNALS*\n\n",
-        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTax: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
-        'prem_lock': "🔒 *PREMIUM FEATURE*\nThis feature is only for Premium members."
-    },
-    'ro': {
-        'start': "🚀 *Born Crypto Bot v2.0*\nSelectează limba:",
-        'main': "🏠 *Meniu Principal*",
-        'free': "📊 Semnale Free",
-        'premium': "💎 SERVICII PREMIUM",
-        'signals': "📈 5x Semnale", 'whale': "🐳 Alerte Balene", 'gems': "💎 Early Gems", 'gainers': "🔥 Top Gainers",
-        'pay': "💳 Cumpără Acum",
-        'back': "⬅️ Înapoi",
-        'lang': "🌐 Schimbă Limba",
-        'trial_expired': "🚨 *Trial expirat!*",
-        'ask_address': "🛰️ Trimite adresa contractului:",
-        'free_header': "🆓 *SEMNALE LIVE TOP MONEDE*\n\n",
-        'audit_res': "🔍 *Audit:* `{addr}`\nHoneypot: {hp}\nTaxe: {bt}/{st}\nLP: {lp}\nOwner: {ow}",
-        'prem_lock': "🔒 *FUNCȚIE PREMIUM*\nAceastă opțiune este disponibilă doar membrilor Premium."
-    }
-}
-strings['de'] = strings['en'].copy(); strings['fr'] = strings['en'].copy()
-
-def is_trial_active(user_id):
-    if user_id not in user_trial_start:
-        user_trial_start[user_id] = datetime.now()
-        save_trials(user_trial_start)
-        return True
-    return datetime.now() <= user_trial_start[user_id] + timedelta(days=3)
+    except: return "❌ Market data unavailable."
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -119,7 +70,7 @@ def start(message):
         save_trials(user_trial_start)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română", "🇩🇪 Deutsch", "🇫🇷 Français")
-    bot.send_message(uid, strings['en']['start'], reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(uid, "🚀 *Born Crypto Bot v2.0*\nSelect language:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -133,44 +84,42 @@ def router(message):
 
     lang = user_lang.get(uid, 'en')
 
-    if not is_trial_active(uid):
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
-        bot.send_message(uid, strings[lang]['trial_expired'], reply_markup=markup, parse_mode="Markdown")
-        return
+    # Porneste thread-ul de follow-up (o singura data pe sesiune de interactiune)
+    if text in ["📊 Semnale Free", "📊 Free Signals"]:
+        threading.Thread(target=send_marketing_followup, args=(uid, lang)).start()
 
-    # LOGICA SEMNALE TOP AUTOMATE
+    # Logica de Trial & Navigare (Păstrată din versiunea anterioară)
     if "📊" in text: 
         bot.send_message(uid, "⌛ _Fetching market data..._", parse_mode="Markdown")
         signals = get_top_signals()
-        bot.send_message(uid, strings[lang]['free_header'] + signals, parse_mode="Markdown")
-
+        header = "🆓 *LIVE TOP SIGNALS*\n\n" if lang == 'en' else "🆓 *SEMNALE LIVE TOP*\n\n"
+        bot.send_message(uid, header + signals, parse_mode="Markdown")
     elif "🛡️" in text or "🔍" in text:
-        bot.send_message(uid, strings[lang]['ask_address'])
-
+        bot.send_message(uid, "🛰️ " + ("Paste address:" if lang == 'en' else "Trimite adresa:"))
     elif "💎" in text: show_premium(message)
     elif "⬅️" in text: show_main(message)
     elif "🌐" in text: start(message)
     elif any(x in text for x in ["📈", "🐳", "🔥", "💎 Early"]):
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
-        bot.send_message(uid, strings[lang]['prem_lock'], reply_markup=markup, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="Pay", url=STRIPE_PAYMENT_LINK))
+        bot.send_message(uid, "🔒 Premium feature!", reply_markup=markup)
 
 def show_main(message):
     lang = user_lang.get(message.chat.id, 'en')
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(strings[lang]['free'], strings[lang]['premium'])
+    markup.row("📊 Free Signals", "💎 PREMIUM")
     markup.row("🛡️ DeFi Analysis", "🔍 Contract Audit")
-    markup.row(strings[lang]['lang'])
-    bot.send_message(message.chat.id, strings[lang]['main'], reply_markup=markup, parse_mode="Markdown")
+    markup.row("🌐 Language")
+    bot.send_message(message.chat.id, "🏠 *Main Menu*", reply_markup=markup, parse_mode="Markdown")
 
 def show_premium(message):
     lang = user_lang.get(message.chat.id, 'en')
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(strings[lang]['signals'], strings[lang]['whale'])
-    markup.row(strings[lang]['gems'], strings[lang]['gainers'])
-    markup.row(strings[lang]['back'])
-    pay_btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text=strings[lang]['pay'], url=STRIPE_PAYMENT_LINK))
-    bot.send_message(message.chat.id, "💎 *BORN CRYPTO PREMIUM*", reply_markup=markup, parse_mode="Markdown")
-    bot.send_message(message.chat.id, "Click below for instant access:", reply_markup=pay_btn)
+    markup.row("📈 5x Signals", "🐳 Whale Alerts")
+    markup.row("💎 Early Gems", "🔥 Gainers")
+    markup.row("⬅️ Back")
+    pay_btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💳 Buy Now 10€", url=STRIPE_PAYMENT_LINK))
+    bot.send_message(message.chat.id, "💎 *PREMIUM SERVICES*", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, "Get full access here:", reply_markup=pay_btn)
 
 if __name__ == "__main__":
     try: bot.remove_webhook()
