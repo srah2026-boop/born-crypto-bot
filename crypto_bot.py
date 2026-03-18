@@ -12,12 +12,12 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 
 user_state = {}
 
-# --- FUNCTIE MARKETING (2 MINUTE) ---
+# --- FUNCTIE MARKETING (Mesaj automat dupa 2 minute) ---
 def send_marketing_followup(chat_id):
     time.sleep(120) 
-    markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 GO PREMIUM", url=STRIPE_PAYMENT_LINK))
+    markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="💎 UPGRADE TO PREMIUM", url=STRIPE_PAYMENT_LINK))
     try:
-        bot.send_message(chat_id, "🚀 *Don't miss the next 10x Gem!*\nUpgrade to Premium for real-time Whale Alerts and Early Gems.", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(chat_id, "🚀 *Don't trade alone!*\nJoin our Premium members to get 10x Gems and real-time Whale Alerts.", reply_markup=markup, parse_mode="Markdown")
     except: pass
 
 # --- MOTOR SCANARE ---
@@ -45,16 +45,16 @@ def get_security_data(address):
         except: continue
     return report
 
-# --- BUTOANELE DIN DREAPTA (INLINE) - ACUM FUNCTIONALE ---
+# --- BUTOANELE DIN DREAPTA/STANGA (INLINE AUDIT) ---
 def get_inline_audit_buttons(address):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    # Butoane externe
     btn_chart = types.InlineKeyboardButton("📊 Chart", url=f"https://dexscreener.com/search?q={address}")
     btn_buy = types.InlineKeyboardButton("🛒 Buy Token", url=f"https://pancakeswap.finance/swap?outputCurrency={address}")
-    # Butoane Premium cu Callback
-    btn_alert = types.InlineKeyboardButton("🔔 Set Price Alert", callback_data="lock_feature")
-    btn_add = types.InlineKeyboardButton("➕ Add Coin", callback_data="lock_feature")
+    btn_alert = types.InlineKeyboardButton("🔔 Set Price Alert", callback_data="lock_premium")
+    btn_add = types.InlineKeyboardButton("➕ Add to Portfolio", callback_data="lock_premium")
+    btn_ultra = types.InlineKeyboardButton("✨ Show Ultra Benefits", callback_data="ultra_info")
     markup.add(btn_chart, btn_buy, btn_alert, btn_add)
+    markup.row(btn_ultra)
     return markup
 
 # --- MENIURI ---
@@ -63,20 +63,33 @@ def show_main(chat_id):
     markup.row("📊 Free Signals", "💎 PREMIUM")
     markup.row("🛡️ DeFi Analysis", "🔍 Contract Audit")
     markup.row("🌐 Language", "ℹ️ About")
-    bot.send_message(chat_id, "🏠 *Main Menu*:", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(chat_id, "🏠 *Born Crypto Terminal Online*", reply_markup=markup, parse_mode="Markdown")
 
-# --- HANDLERS ---
+# --- HANDLERS CALLBACK (BUTOANE INLINE) ---
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callbacks(call):
+    if call.data == "lock_premium":
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Premium", url=STRIPE_PAYMENT_LINK))
+        bot.send_message(call.message.chat.id, "⚠️ *Premium Feature*\nLive monitoring and portfolio tracking are only available for Premium members.", reply_markup=markup, parse_mode="Markdown")
+    
+    elif call.data == "ultra_info":
+        ultra_text = (
+            "✨ *ULTRA PREMIUM BENEFITS*\n\n"
+            "🚀 *Instant Alerts:* Zero delay on market moves.\n"
+            "🐳 *Whale Tracker:* Watch the big wallets in real-time.\n"
+            "💎 *Early Access:* Sniper-level info on new launches.\n"
+            "🛡️ *Auto-Audit:* Automatic safety check for every token you track."
+        )
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("💎 GET ULTRA NOW", url=STRIPE_PAYMENT_LINK))
+        bot.send_message(call.message.chat.id, ultra_text, reply_markup=markup, parse_mode="Markdown")
+    bot.answer_callback_query(call.id)
+
+# --- HANDLERS MESAJE ---
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🇬🇧 English", "🇷🇴 Română")
-    bot.send_message(message.chat.id, "🚀 *Born Crypto Bot Online*", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data == "lock_feature")
-def handle_lock(call):
-    markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Premium", url=STRIPE_PAYMENT_LINK))
-    bot.send_message(call.message.chat.id, "❌ *Feature Locked*\nTo use Alerts and Portfolio tracking, please upgrade to Premium.", reply_markup=markup, parse_mode="Markdown")
-    bot.answer_callback_query(call.id)
+    bot.send_message(message.chat.id, "🚀 *Born Crypto Bot v4.5*", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -87,9 +100,9 @@ def router(message):
 
     if user_state.get(uid) == "waiting":
         if text.startswith("0x") and len(text) > 30:
-            bot.send_message(uid, "⌛ *Analyzing...*", parse_mode="Markdown")
+            bot.send_message(uid, "⌛ *Scanning...*", parse_mode="Markdown")
             data = get_security_data(text)
-            report = (f"🛡️ *SCAN REPORT*\n`{text}`\n\n💰 Price: `{data['price']}`\n💧 Liq: `{data['liq']}`\n"
+            report = (f"🛡️ *SECURITY REPORT*\n`{text}`\n\n💰 Price: `{data['price']}`\n💧 Liq: `{data['liq']}`\n"
                       f"🚨 Honeypot: {data['hp']}\n💸 Tax: {data['tax']}\n👑 Owner: {data['ow']}")
             bot.send_message(uid, report, reply_markup=get_inline_audit_buttons(text), parse_mode="Markdown")
         user_state[uid] = None; return
@@ -106,14 +119,25 @@ def router(message):
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.row("📈 5x Signals", "🐳 Whale Alerts")
         markup.row("💎 Early Gems", "⬅️ Back")
-        bot.send_message(uid, "💎 *PREMIUM SERVICES*", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(uid, "💎 *PREMIUM TERMINAL*", reply_markup=markup, parse_mode="Markdown")
 
     elif "ℹ️ About" in text:
-        about = ("ℹ️ *About Born Crypto Bot*\n\nProfessional DeFi tools for smart traders.\n"
-                 "• *Free:* Audits & Signals\n• *Premium:* Whale Alerts & Early Gems\n\n"
-                 "Why Premium? Get access to hidden coins before they trend and track big whale wallets live.")
-        btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 GET PREMIUM", url=STRIPE_PAYMENT_LINK))
-        bot.send_message(uid, about, reply_markup=btn, parse_mode="Markdown")
+        about_text = (
+            "🚀 *BORN CRYPTO TERMINAL v4.5*\n\n"
+            "Your all-in-one DeFi powerhouse for smart trading. Stop guessing, start using professional data!\n\n"
+            "🔥 *BOT FUNCTIONS:*\n"
+            "🔹 *Contract Audit:* Scan for Honeypots, Rug-pulls, and High Taxes.\n"
+            "🔹 *DeFi Analysis:* Real-time price and liquidity tracking.\n"
+            "🔹 *Free Signals:* High-accuracy daily market setups.\n\n"
+            "💎 *WHY UPGRADE TO PREMIUM?*\n"
+            "The market moves fast. Premium members get the unfair advantage:\n"
+            "✅ *Early Gems:* Be the first to buy new tokens before they trend.\n"
+            "✅ *Whale Alerts:* Track institutional money movements live.\n"
+            "✅ *5x-10x Signals:* Access our private, high-conviction alerts.\n\n"
+            "✨ *Don't be the exit liquidity. Trade like a pro!*"
+        )
+        btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 UNLOCK PREMIUM", url=STRIPE_PAYMENT_LINK))
+        bot.send_message(uid, about_text, reply_markup=btn, parse_mode="Markdown")
 
     elif text in ["📈 5x Signals", "🐳 Whale Alerts", "💎 Early Gems"]:
         btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK))
@@ -122,11 +146,7 @@ def router(message):
     elif "⬅️" in text or "Back" in text: show_main(uid)
     elif "🌐" in text: start(message)
 
-# --- PORNIRE SIGURA PENTRU KOYEB ---
 if __name__ == "__main__":
-    print("Botul porneste...")
-    # Stergem orice webhook activ care ar putea bloca botul
     bot.remove_webhook()
     time.sleep(1)
-    # Rulam polling-ul
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+    bot.infinity_polling()
