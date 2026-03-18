@@ -11,7 +11,6 @@ STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 user_state = {}
-user_lang = {}
 
 # --- FUNCTIE MARKETING (2 MINUTE) ---
 def send_marketing_followup(chat_id):
@@ -46,13 +45,15 @@ def get_security_data(address):
         except: continue
     return report
 
-# --- BUTOANELE DIN DREAPTA (INLINE) ---
+# --- BUTOANELE DIN DREAPTA (INLINE) - ACUM FUNCTIONALE ---
 def get_inline_audit_buttons(address):
     markup = types.InlineKeyboardMarkup(row_width=2)
+    # Butoane externe
     btn_chart = types.InlineKeyboardButton("📊 Chart", url=f"https://dexscreener.com/search?q={address}")
     btn_buy = types.InlineKeyboardButton("🛒 Buy Token", url=f"https://pancakeswap.finance/swap?outputCurrency={address}")
-    btn_alert = types.InlineKeyboardButton("🔔 Set Price Alert", callback_data="lock")
-    btn_add = types.InlineKeyboardButton("➕ Add Coin", callback_data="lock")
+    # Butoane Premium cu Callback
+    btn_alert = types.InlineKeyboardButton("🔔 Set Price Alert", callback_data="lock_feature")
+    btn_add = types.InlineKeyboardButton("➕ Add Coin", callback_data="lock_feature")
     markup.add(btn_chart, btn_buy, btn_alert, btn_add)
     return markup
 
@@ -71,10 +72,10 @@ def start(message):
     markup.add("🇬🇧 English", "🇷🇴 Română")
     bot.send_message(message.chat.id, "🚀 *Born Crypto Bot Online*", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data == "lock")
+@bot.callback_query_handler(func=lambda call: call.data == "lock_feature")
 def handle_lock(call):
     markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Premium", url=STRIPE_PAYMENT_LINK))
-    bot.send_message(call.message.chat.id, "❌ This is a *Premium Feature*. Please upgrade to use Alerts or Add Coins.", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(call.message.chat.id, "❌ *Feature Locked*\nTo use Alerts and Portfolio tracking, please upgrade to Premium.", reply_markup=markup, parse_mode="Markdown")
     bot.answer_callback_query(call.id)
 
 @bot.message_handler(func=lambda m: True)
@@ -82,7 +83,7 @@ def router(message):
     uid = message.chat.id
     text = message.text
     
-    if text == "🇬🇧 English" or text == "🇷🇴 Română": show_main(uid); return
+    if text in ["🇬🇧 English", "🇷🇴 Română"]: show_main(uid); return
 
     if user_state.get(uid) == "waiting":
         if text.startswith("0x") and len(text) > 30:
@@ -109,7 +110,8 @@ def router(message):
 
     elif "ℹ️ About" in text:
         about = ("ℹ️ *About Born Crypto Bot*\n\nProfessional DeFi tools for smart traders.\n"
-                 "• *Free:* Audits & Signals\n• *Premium:* Whale Alerts & Early Gems")
+                 "• *Free:* Audits & Signals\n• *Premium:* Whale Alerts & Early Gems\n\n"
+                 "Why Premium? Get access to hidden coins before they trend and track big whale wallets live.")
         btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 GET PREMIUM", url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, about, reply_markup=btn, parse_mode="Markdown")
 
@@ -120,5 +122,11 @@ def router(message):
     elif "⬅️" in text or "Back" in text: show_main(uid)
     elif "🌐" in text: start(message)
 
+# --- PORNIRE SIGURA PENTRU KOYEB ---
 if __name__ == "__main__":
-    bot.polling(none_stop=True)
+    print("Botul porneste...")
+    # Stergem orice webhook activ care ar putea bloca botul
+    bot.remove_webhook()
+    time.sleep(1)
+    # Rulam polling-ul
+    bot.infinity_polling(timeout=20, long_polling_timeout=10)
