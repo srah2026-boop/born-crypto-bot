@@ -8,14 +8,14 @@ import random
 # --- Configurare ---
 TOKEN = os.environ.get("TOKEN")
 ADMIN_ID = 988785764 
-ADMIN_USERNAME = "bella.milly" # Userul tău setat corect
+ADMIN_USERNAME = "Bellamilly" # Corectat: @Bellamilly
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 PREMIUM_FILE = "premium_users.txt"
 user_state = {}
 
-# --- FUNCTII DATE LIVE (SIGNALS, GEMS, WHALES) ---
+# --- FUNCTII DATE LIVE ---
 
 def get_live_price(ticker):
     try:
@@ -42,7 +42,7 @@ def get_whale_alerts():
         alert += f"⚠️ *LARGE BUY:* `${v:,.0f}` in *{random.choice(tk)}*\n🕒 Just now | ✅ Verified\n\n"
     return alert
 
-# --- FUNCTII DEFI & AUDIT (REALE) ---
+# --- FUNCTII DEFI & AUDIT ---
 
 def perform_real_audit(address):
     address = address.strip().lower()
@@ -95,7 +95,13 @@ def premium_menu():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v6.7*\n\nYour Telegram ID: `{message.chat.id}`\n(Use this ID for activation)", reply_markup=main_menu(), parse_mode="Markdown")
+    welcome_text = (
+        f"🚀 *Born Crypto Terminal v6.8*\n\n"
+        f"🆔 *YOUR TELEGRAM ID:* `{message.chat.id}`\n"
+        f"--------------------------------\n"
+        f"Please save this ID. You will need it for VIP activation after payment."
+    )
+    bot.send_message(message.chat.id, welcome_text, reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['addpremium'])
 def add_prem(message):
@@ -162,25 +168,25 @@ def router(message):
         else: bot.send_message(uid, "❌ Locked.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock", url=STRIPE_PAYMENT_LINK)))
         return
 
-    # --- ABOUT IMPACTFUL ---
+    # --- ABOUT (CU CONTACT CORECTAT) ---
     if text == "ℹ️ About":
         about = (
             "🚀 *BORN CRYPTO TERMINAL*\n"
             "Professional institutional-grade trading bot.\n\n"
             "🟢 *FREE FUNCTIONS:*\n"
             "🔹 *Free Signals:* Daily setups for major assets (BTC/ETH).\n"
-            "🔹 *DeFi Analysis:* Live Price, Liquidity, and Volume for any address.\n"
-            "🔹 *Contract Audit:* Scan for Honeypots & Scams instantly.\n\n"
+            "🔹 *DeFi Analysis:* Live Price, Liquidity, and Volume.\n"
+            "🔹 *Contract Audit:* Scan for Honeypots & Scams.\n\n"
             "💎 *PREMIUM FUNCTIONS (VIP):*\n"
             "📈 *5x Signals:* Trending coins with entry points and LIVE Prices.\n"
             "🐳 *Whale Alerts:* Follow institutional wallet movements.\n"
             "💎 *Early Gems:* Find hidden low-caps before the pump.\n\n"
             "✨ *READY TO WIN?*\n"
-            "Upgrade now and contact @bella.milly for VIP activation."
+            "Upgrade now and contact @Bellamilly for VIP activation."
         )
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔓 GET PREMIUM NOW", url=STRIPE_PAYMENT_LINK))
-        markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT @bella.milly", url=f"https://t.me/{ADMIN_USERNAME}"))
+        markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT @Bellamilly", url=f"https://t.me/{ADMIN_USERNAME}"))
         bot.send_message(uid, about, reply_markup=markup, parse_mode="Markdown")
         return
 
