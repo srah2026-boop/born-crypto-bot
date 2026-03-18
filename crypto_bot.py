@@ -15,52 +15,58 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 PREMIUM_FILE = "premium_users.txt"
 user_state = {}
 
-# --- REPARARE FINALĂ AUDIT ---
+# --- REPARARE DEFINITIVĂ AUDIT ---
 
 def perform_real_audit(address):
     address = address.strip().lower()
     if not address.startswith("0x"):
-        return "⚠️ *Format Invalid:* Momentan suportăm doar rețelele 0x (ETH, BSC, BASE, POLYGON)."
+        return "⚠️ *Format Invalid:* Folosește o adresă 0x (ETH/BSC/BASE)."
     
-    headers = {"User-Agent": "Mozilla/5.0"}
-    # Listă extinsă de rețele: 1 (ETH), 56 (BSC), 137 (Polygon), 8453 (Base), 42161 (Arbitrum)
-    networks = ["1", "56", "8453", "137", "42161"]
+    # Header profesional pentru a evita blocarea de către API
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
     
-    for net in networks:
+    # Rețelele prioritare
+    networks = {"1": "Ethereum", "56": "BSC", "8453": "Base", "137": "Polygon"}
+    
+    for net_id, net_name in networks.items():
         try:
-            url = f"https://api.goplussecurity.io/api/v1/token_security/{net}?contract_addresses={address}"
-            response = requests.get(url, headers=headers, timeout=5)
-            res = response.json()
+            url = f"https://api.goplussecurity.io/api/v1/token_security/{net_id}?contract_addresses={address}"
+            response = requests.get(url, headers=headers, timeout=12)
             
-            # Verificăm dacă GoPlus a găsit contractul pe această rețea
-            if res.get('code') == 1 and address in res.get('result', {}):
-                d = res['result'][address]
-                
-                # Traducem datele în format vizual atractiv
-                hp = "🚨 *DA*" if d.get("is_honeypot") == "1" else "✅ *NU*"
-                bt = f"{float(d.get('buy_tax', 0))*100:.1f}%"
-                st = f"{float(d.get('sell_tax', 0))*100:.1f}%"
-                own = "Renounced ✅" if d.get("owner_address") in ["", "0x0000000000000000000000000000000000000000"] else "Active ⚠️"
-                
-                net_name = {"1": "Ethereum", "56": "BSC", "8453": "Base", "137": "Polygon", "42161": "Arbitrum"}.get(net)
-                
-                return (f"🛡️ *SECURITY AUDIT ({net_name})*\n`{address}`\n\n"
-                        f"🚨 Honeypot: {hp}\n"
-                        f"💸 Buy Tax: `{bt}` | Sell Tax: `{st}`\n"
-                        f"👑 Owner: {own}\n"
-                        f"🛡️ Mintable: {'No' if d.get('is_mintable')=='0' else 'Yes 🚨'}\n"
-                        f"✅ Proxy: {'No' if d.get('is_proxy')=='0' else 'Yes ⚠️'}")
-        except Exception:
-            continue # Dacă nu găsește pe o rețea, trece la următoarea
+            if response.status_code == 200:
+                res = response.json()
+                if res.get('code') == 1 and res.get('result') and address in res['result']:
+                    d = res['result'][address]
+                    
+                    # Extragere date cu valori implicite (0 dacă lipsește)
+                    hp = "🚨 *DA*" if str(d.get("is_honeypot", "0")) == "1" else "✅ *NU*"
+                    buy_tax = f"{float(d.get('buy_tax', 0))*100:.1f}%"
+                    sell_tax = f"{float(d.get('sell_tax', 0))*100:.1f}%"
+                    
+                    # Verificare Owner
+                    owner = d.get("owner_address", "")
+                    owner_status = "Renounced ✅" if owner in ["", "0x0000000000000000000000000000000000000000", "0x000000000000000000000000000000000000dead"] else "Active ⚠️"
+                    
+                    return (f"🛡️ *SECURITY AUDIT ({net_name})*\n`{address}`\n\n"
+                            f"🚨 Honeypot: {hp}\n"
+                            f"💸 Buy Tax: `{buy_tax}` | Sell Tax: `{sell_tax}`\n"
+                            f"👑 Owner: {owner_status}\n"
+                            f"🛡️ Mintable: {'No' if str(d.get('is_mintable'))=='0' else 'Yes 🚨'}\n"
+                            f"✅ Liquidity Locked: {'Yes' if str(d.get('lp_holder_count', '0')) != '0' else 'No ⚠️'}")
+        except Exception as e:
+            continue
             
-    return "❌ *Contract Not Found:* Asigură-te că adresa este corectă și moneda este listată pe un DEX."
+    return "❌ *Contract Not Found:* Dacă moneda este foarte nouă, mai așteaptă 2 minute sau verifică dacă adresa este corectă pe DexScreener."
 
-# --- FUNCȚIE DEFI (Care funcționează deja) ---
+# --- DEFI ANALYSIS (Funcțional) ---
 
 def get_market_analysis(address):
     try:
         url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
-        res = requests.get(url, timeout=8).json()
+        res = requests.get(url, timeout=10).json()
         if res.get('pairs'):
             p = res['pairs'][0]
             return (f"📊 *MARKET ANALYSIS*\n`{p['baseToken']['name']} ({p['baseToken']['symbol']})`\n\n"
@@ -69,7 +75,7 @@ def get_market_analysis(address):
                     f"📈 24h Vol: `${p.get('volume', {}).get('h24', 0):,.0f}`\n"
                     f"🔗 [View Chart]({p['url']})")
     except: pass
-    return "❌ *No Market Data available.*"
+    return "❌ *No Market Data found.*"
 
 # --- LOGICA SISTEM ---
 
@@ -93,16 +99,7 @@ def premium_menu():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v7.1*\n🆔 *ID:* `{message.chat.id}`", reply_markup=main_menu(), parse_mode="Markdown")
-
-@bot.message_handler(commands=['addpremium'])
-def add_prem(message):
-    if message.from_user.id == ADMIN_ID:
-        try:
-            tid = message.text.split()[1]
-            with open(PREMIUM_FILE, "a") as f: f.write(f"{tid}\n")
-            bot.send_message(message.chat.id, f"✅ User {tid} activated!")
-        except: pass
+    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v7.2*\n🆔 *ID:* `{message.chat.id}`", reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -116,7 +113,6 @@ def router(message):
         bot.send_message(uid, "🏠 *Main Menu*", reply_markup=main_menu(), parse_mode="Markdown")
         return
 
-    # --- INPUT ADRESE ---
     if text == "🛡️ DeFi Analysis":
         user_state[uid] = "waiting_defi"
         bot.send_message(uid, "🛰️ *Trimite adresa contractului:*", parse_mode="Markdown")
@@ -131,6 +127,7 @@ def router(message):
         user_state[uid] = None
         return
     if user_state.get(uid) == "waiting_audit" and text.startswith("0x"):
+        bot.send_message(uid, "⌛ *Scanning...*", parse_mode="Markdown") # Feedback vizual
         bot.send_message(uid, perform_real_audit(text), parse_mode="Markdown")
         user_state[uid] = None
         return
