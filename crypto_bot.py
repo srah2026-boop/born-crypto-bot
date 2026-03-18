@@ -15,14 +15,13 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 PREMIUM_FILE = "premium_users.txt"
 user_state = {}
 
-# --- FIXED AUDIT FUNCTION (Robust Version) ---
+# --- AUDIT FUNCTION ---
 def perform_real_audit(address):
     address = address.strip().lower()
     if not address.startswith("0x"):
         return "⚠️ *Invalid Format:* Please provide a 0x address."
     
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    # Checking ETH, BSC, and BASE
+    headers = {"User-Agent": "Mozilla/5.0"}
     networks = {"1": "Ethereum", "56": "BSC", "8453": "Base"}
     
     for net_id, net_name in networks.items():
@@ -42,7 +41,7 @@ def perform_real_audit(address):
                         f"👑 Owner: {own}\n"
                         f"🛡️ Mintable: {'No' if d.get('is_mintable')=='0' else 'Yes 🚨'}")
         except: continue
-    return "❌ *Contract Not Found:* Check the address or try again in a moment."
+    return "❌ *Contract Not Found:* Check the address and try again."
 
 # --- LIVE DATA FUNCTIONS ---
 def get_live_price(ticker):
@@ -106,7 +105,7 @@ def premium_menu():
 # --- HANDLERS ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v7.4*\n🆔 *YOUR ID:* `{message.chat.id}`", reply_markup=main_menu(), parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v7.5*\n🆔 *YOUR ID:* `{message.chat.id}`", reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['addpremium'])
 def add_prem(message):
@@ -115,7 +114,7 @@ def add_prem(message):
             tid = message.text.split()[1]
             with open(PREMIUM_FILE, "a") as f: f.write(f"{tid}\n")
             bot.send_message(message.chat.id, f"✅ User {tid} activated!")
-            bot.send_message(tid, "🎉 *Premium Unlocked!*", reply_markup=main_menu())
+            bot.send_message(tid, "🎉 *Premium Unlocked!* Enjoy the elite features.", reply_markup=main_menu())
         except: pass
 
 @bot.message_handler(func=lambda m: True)
@@ -133,11 +132,11 @@ def router(message):
     # --- ACTIONS ---
     if text == "🛡️ DeFi Analysis":
         user_state[uid] = "waiting_defi"
-        bot.send_message(uid, "🛰️ *Send contract address for Analysis:*", parse_mode="Markdown")
+        bot.send_message(uid, "🛰️ *Send contract address for Market Analysis:*", parse_mode="Markdown")
         return
     if text == "🔍 Contract Audit":
         user_state[uid] = "waiting_audit"
-        bot.send_message(uid, "🔍 *Send contract address for Audit:*", parse_mode="Markdown")
+        bot.send_message(uid, "🔍 *Send contract address for Security Scan:*", parse_mode="Markdown")
         return
 
     if user_state.get(uid) == "waiting_defi" and text.startswith("0x"):
@@ -153,15 +152,10 @@ def router(message):
     # --- PREMIUM FEATURES ---
     if text == "📈 5x Signals":
         if is_premium(uid):
-            bot.send_message(uid, "⌛ *Calculating Top Signals...*")
-            coins = [
-                {"n": "PEPE", "t": "+150%"}, {"n": "WIF", "t": "+85%"}, 
-                {"n": "SOL", "t": "+40%"}, {"n": "FET", "t": "+110%"}, 
-                {"n": "BONK", "t": "+200%"}, {"n": "POPCAT", "t": "+130%"}
-            ]
+            bot.send_message(uid, "⌛ *Analyzing Market Trends...*")
+            coins = [{"n": "PEPE", "t": "+150%"}, {"n": "WIF", "t": "+85%"}, {"n": "SOL", "t": "+40%"}, {"n": "FET", "t": "+110%"}, {"n": "BONK", "t": "+200%"}, {"n": "POPCAT", "t": "+130%"}]
             report = "📈 *TOP SIGNALS & LIVE PRICES*\n\n"
-            for c in coins:
-                report += f"🔥 *{c['n']}*\n💰 Live: `${get_live_price(c['n'])}` | Target: `{c['t']}`\n\n"
+            for c in coins: report += f"🔥 *{c['n']}*\n💰 Live: `${get_live_price(c['n'])}` | Target: `{c['t']}`\n\n"
             bot.send_message(uid, report, parse_mode="Markdown")
         else:
             btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK))
@@ -178,19 +172,28 @@ def router(message):
         else: bot.send_message(uid, "❌ Locked.", parse_mode="Markdown")
         return
 
-    # --- ABOUT SECTION ---
+    # --- FULL DETAILED ABOUT SECTION ---
     if text == "ℹ️ About":
-        about_text = (
-            "🚀 *BORN CRYPTO TERMINAL*\n\n"
-            "🟢 *FREE:* Signals, DeFi Analysis, Security Audit.\n"
-            "💎 *PREMIUM:* 10x Signals, Whale Alerts, Early Gems.\n\n"
-            "✨ *Don't be exit liquidity. Trade like a Pro.*\n"
-            "Contact @Bellamilly for VIP activation."
+        full_about = (
+            "🚀 *BORN CRYPTO TERMINAL - THE ULTIMATE GUIDE*\n\n"
+            "Gain the institutional edge with our all-in-one DeFi toolkit. "
+            "Stop guessing and start trading with real-time data.\n\n"
+            "🟢 *FREE FEATURES:*\n"
+            "🔹 *Free Signals:* Daily low-risk setups for major assets like BTC & ETH.\n"
+            "🔹 *DeFi Analysis:* Check any 0x contract for real-time Price, Liquidity, and Volume.\n"
+            "🔹 *Contract Audit:* Protect yourself from scams. Scan for Honeypots and high taxes instantly.\n\n"
+            "💎 *PREMIUM FEATURES (VIP):*\n"
+            "📈 *5x Signals:* High-growth trending coins (SOL, AI gems, Memes) with LIVE prices and targets.\n"
+            "🐳 *Whale Alerts:* Follow the 'Smart Money'. Real-time alerts on massive institutional moves.\n"
+            "💎 *Early Gems:* Discover low-cap rockets on DexScreener before they hit the mainstream.\n\n"
+            "✨ *GET STARTED:*\n"
+            "1. Pay via the link below.\n"
+            "2. Send your **ID** and **Proof of Payment** to @Bellamilly for VIP activation."
         )
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔓 GET PREMIUM NOW", url=STRIPE_PAYMENT_LINK))
-        markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT SUPPORT", url=f"https://t.me/{ADMIN_USERNAME}"))
-        bot.send_message(uid, about_text, reply_markup=markup, parse_mode="Markdown")
+        markup.add(types.InlineKeyboardButton("💳 UPGRADE TO PREMIUM", url=STRIPE_PAYMENT_LINK))
+        markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT SUPPORT (@Bellamilly)", url=f"https://t.me/{ADMIN_USERNAME}"))
+        bot.send_message(uid, full_about, reply_markup=markup, parse_mode="Markdown")
         return
 
     if text == "📊 Free Signals":
