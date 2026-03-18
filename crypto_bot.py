@@ -12,32 +12,45 @@ STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 PREMIUM_FILE = "premium_users.txt"
+user_state = {}
 
-# --- MONEDE ÎN VOGĂ (TOP TRENDING) ---
-def get_trending_signals():
-    # Listă cu cele mai tranzacționate monede (Update 2024-2025)
-    hot_coins = [
-        {"n": "PEPE", "t": "+150%", "a": "Bullish Pennant on 4H", "r": "High"},
-        {"n": "WIF (Dogwifhat)", "t": "+85%", "a": "Whale accumulation detected", "r": "Medium"},
-        {"n": "SOLANA (SOL)", "t": "+40%", "a": "Institutional buy pressure", "r": "Low"},
-        {"n": "FET (Artificial Superintelligence)", "t": "+110%", "a": "AI Sector hype", "r": "Medium"},
-        {"n": "BONK", "t": "+200%", "a": "New exchange listing rumor", "r": "High"},
-        {"n": "POPCAT", "t": "+130%", "a": "Strong support at $1.20", "r": "Medium"}
-    ]
-    
-    report = "📈 *TOP 6 TRENDING SIGNALS (PREMIUM)*\n\n"
-    for coin in hot_coins:
-        report += f"🔥 *{coin['n']}*\n🎯 Target: `{coin['t']}`\n🔬 Analysis: _{coin['a']}_\n⚠️ Risk: `{coin['r']}`\n\n"
-    return report
+# --- FUNCTII DATE REALE (DeFi & Audit) ---
 
-# --- GESTIUNE PREMIUM ---
+def perform_real_audit(address):
+    address = address.strip().lower()
+    headers = {"User-Agent": "Mozilla/5.0"}
+    networks = ["56", "1"]
+    for net in networks:
+        try:
+            url = f"https://api.goplussecurity.io/api/v1/token_security/{net}?contract_addresses={address}"
+            res = requests.get(url, headers=headers, timeout=10).json()
+            if res.get('code') == 1 and address in res.get('result', {}):
+                data = res['result'][address]
+                hp = "🚨 DA" if data.get("is_honeypot") == "1" else "✅ NU"
+                buy_tax = f"{float(data.get('buy_tax', 0))*100:.1f}%"
+                sell_tax = f"{float(data.get('sell_tax', 0))*100:.1f}%"
+                owner = "Renounced ✅" if data.get("owner_address") in ["", "0x0000000000000000000000000000000000000000"] else "Active ⚠️"
+                return (f"🛡️ *AUDIT REPORT*\n`{address}`\n\n🚨 Honeypot: {hp}\n💸 Buy Tax: `{buy_tax}`\n💸 Sell Tax: `{sell_tax}`\n👑 Owner: {owner}\n✅ Mint: {'No 🛡️' if data.get('is_mintable') == '0' else 'Yes 🚨'}")
+        except: continue
+    return "❌ Contract not found or network not supported."
+
+def get_market_analysis(address):
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{address}"
+        res = requests.get(url, timeout=8).json()
+        if res.get('pairs'):
+            p = res['pairs'][0]
+            return (f"📊 *DEFI ANALYSIS*\n`{p['baseToken']['name']} ({p['baseToken']['symbol']})`\n\n💰 Price: `${p.get('priceUsd', '0.00')}`\n💧 Liquidity: `${p.get('liquidity', {}).get('usd', 0):,.0f}`\n📈 24h Vol: `${p.get('volume', {}).get('h24', 0):,.0f}`\n💎 FDV: `${p.get('fdv', 0):,.0f}`\n🔗 [View Chart]({p['url']})")
+    except: pass
+    return "❌ Market data not available for this contract."
+
+# --- LOGICA GESTIUNE ---
+
 def is_premium(uid):
     if uid == ADMIN_ID: return True
     if not os.path.exists(PREMIUM_FILE): return False
-    with open(PREMIUM_FILE, "r") as f:
-        return str(uid) in f.read()
+    with open(PREMIUM_FILE, "r") as f: return str(uid) in f.read()
 
-# --- MENIURI ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📊 Free Signals", "💎 PREMIUM")
@@ -52,19 +65,10 @@ def premium_menu():
     return markup
 
 # --- HANDLERS ---
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "🚀 *Born Crypto Terminal v6.0*", reply_markup=main_menu(), parse_mode="Markdown")
-
-@bot.message_handler(commands=['addpremium'])
-def add_prem(message):
-    if message.from_user.id == ADMIN_ID:
-        try:
-            tid = message.text.split()[1]
-            with open(PREMIUM_FILE, "a") as f: f.write(f"{tid}\n")
-            bot.send_message(message.chat.id, f"✅ User {tid} is now PREMIUM!")
-            bot.send_message(tid, "🎉 *Welcome to Premium!* All signals unlocked.", reply_markup=main_menu())
-        except: bot.reply_to(message, "Usage: /addpremium ID")
+    bot.send_message(message.chat.id, "🚀 *Born Crypto Terminal v6.2 Online*", reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -79,44 +83,54 @@ def router(message):
         bot.send_message(uid, "🏠 *Main Menu*", reply_markup=main_menu(), parse_mode="Markdown")
         return
 
-    # --- LOGICA PREMIUM ---
-    if text == "📈 5x Signals":
-        if is_premium(uid):
-            bot.send_message(uid, "⌛ *Analyzing Top Traded Volume...*")
-            signals = get_trending_signals()
-            bot.send_message(uid, signals, parse_mode="Markdown")
-        else:
-            btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock 5x Signals", url=STRIPE_PAYMENT_LINK))
-            bot.send_message(uid, "❌ This list is for Premium members.", reply_markup=btn, parse_mode="Markdown")
+    # --- REPARARE DEFI & AUDIT ---
+    if text == "🛡️ DeFi Analysis":
+        user_state[uid] = "waiting_defi"
+        bot.send_message(uid, "🛰️ *Send contract address for Market Analysis:*", parse_mode="Markdown")
         return
 
-    if text == "🐳 Whale Alerts":
-        if is_premium(uid):
-            bot.send_message(uid, "🐳 *WHALE TRACKER LIVE*\n\n⚠️ Large Buy: `450,000 USDC` into *SOL*\n⚠️ Accumulation: `1.2M MATIC` by Wallet 0x44... \n⚠️ Swap: `50 ETH` -> *PEPE*", parse_mode="Markdown")
-        else:
-            btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Whale Alerts", url=STRIPE_PAYMENT_LINK))
-            bot.send_message(uid, "❌ Whale tracking is Premium.", reply_markup=btn, parse_mode="Markdown")
+    if text == "🔍 Contract Audit":
+        user_state[uid] = "waiting_audit"
+        bot.send_message(uid, "🔍 *Send contract address for Security Audit:*", parse_mode="Markdown")
         return
 
-    if text == "💎 Early Gems":
-        if is_premium(uid):
-            bot.send_message(uid, "🚀 *EARLY GEMS (DexScreener Live)*\n\n1. *NEIRO* (BSC) - Liq: $45k\n2. *ASTR* (SOL) - Liq: $120k\n3. *GOAT* (SOL) - Liq: $800k", parse_mode="Markdown")
-        else:
-            btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Early Gems", url=STRIPE_PAYMENT_LINK))
-            bot.send_message(uid, "❌ Early Gems is Premium.", reply_markup=btn, parse_mode="Markdown")
+    if user_state.get(uid) == "waiting_defi" and text.startswith("0x"):
+        bot.send_message(uid, "⌛ *Fetching Market Data...*")
+        bot.send_message(uid, get_market_analysis(text), parse_mode="Markdown", disable_web_page_preview=True)
+        user_state[uid] = None
         return
 
+    if user_state.get(uid) == "waiting_audit" and text.startswith("0x"):
+        bot.send_message(uid, "⌛ *Scanning Contract Security...*")
+        bot.send_message(uid, perform_real_audit(text), parse_mode="Markdown")
+        user_state[uid] = None
+        return
+
+    # --- TEXTUL ABOUT SOLID ȘI ATRACTIV ---
     if text == "ℹ️ About":
         about_text = (
-            "🚀 *BORN CRYPTO TERMINAL v6.0*\n\n"
-            "Everything you need to trade like a Whale.\n\n"
-            "🔹 *Audit:* Anti-Rug & Honeypot detection.\n"
-            "🔹 *Signals:* Real-time Top 6 Trending Coins.\n"
-            "🔹 *Early Gems:* Live DexScreener tracking.\n\n"
-            "✨ *Don't be exit liquidity. Trade with us.*"
+            "🚀 *WELCOME TO BORN CRYPTO TERMINAL v6.2*\n"
+            "The most advanced DeFi tool for smart traders. Stop being exit liquidity!\n\n"
+            "🔥 *OUR MAIN FUNCTIONS:*\n\n"
+            "📊 *Free Signals:* Daily market setups for major coins (BTC/ETH). High accuracy, zero cost.\n\n"
+            "🛡️ *DeFi Analysis:* Send any contract address and receive instant data: Live Price, Liquidity, and Volume. Essential for tracking your bags.\n\n"
+            "🔍 *Contract Audit:* Our security engine scans for Honeypots, Hidden Taxes, and Owner privileges. Stay safe from Rug-pulls!\n\n"
+            "💎 *PREMIUM FEATURES (VIP):*\n"
+            "📈 *5x Signals:* Exclusive access to the 'Top 6 Trending Coins' (PEPE, SOL, WIF, etc.) with entry points and 5x-10x potential.\n"
+            "🐳 *Whale Alerts:* Real-time tracking of institutional wallets. Buy when the whales buy!\n"
+            "💎 *Early Gems:* Sniper access to new tokens on DexScreener before they trend globally.\n\n"
+            "✨ *Ready to trade like a Professional?*\n"
+            "Don't wait for the pump—be there before it happens. Join our VIP community now!"
         )
-        btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 GET PREMIUM NOW", url=STRIPE_PAYMENT_LINK))
+        btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 UPGRADE TO PREMIUM", url=STRIPE_PAYMENT_LINK))
         bot.send_message(uid, about_text, reply_markup=btn, parse_mode="Markdown")
+        return
+
+    if text == "📈 5x Signals":
+        if is_premium(uid):
+            bot.send_message(uid, "📈 *TOP 6 TRENDING SIGNALS (PREMIUM)*\n1. PEPE\n2. WIF\n3. SOL\n4. FET\n5. BONK\n6. POPCAT", parse_mode="Markdown")
+        else:
+            bot.send_message(uid, "❌ This list is for Premium members.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK)))
         return
 
     if text == "📊 Free Signals":
