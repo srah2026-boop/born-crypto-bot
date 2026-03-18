@@ -8,44 +8,41 @@ import random
 # --- Configurare ---
 TOKEN = os.environ.get("TOKEN")
 ADMIN_ID = 988785764 
+ADMIN_USERNAME = "bella.milly" # Userul tău setat corect
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 PREMIUM_FILE = "premium_users.txt"
 user_state = {}
 
-# --- FUNCȚII DATE LIVE (SIGNALS, GEMS, WHALES) ---
+# --- FUNCTII DATE LIVE (SIGNALS, GEMS, WHALES) ---
 
 def get_live_price(ticker):
-    """Aduce pretul real de pe piata"""
     try:
         res = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={ticker}", timeout=5).json()
-        if res.get('pairs'):
-            return res['pairs'][0].get('priceUsd', 'N/A')
+        if res.get('pairs'): return res['pairs'][0].get('priceUsd', 'N/A')
     except: return "N/A"
     return "N/A"
 
 def get_real_early_gems():
-    """Aduce Gems reale detectate recent"""
     try:
         res = requests.get("https://api.dexscreener.com/latest/dex/search?q=WBNB", timeout=5).json()
         pairs = res.get('pairs', [])[:3]
         out = ""
         for p in pairs:
             out += f"💎 *{p['baseToken']['symbol']}*\n💰 Price: `${p['priceUsd']}`\n💧 Liq: `${p['liquidity']['usd']:,.0f}`\n📑 `{p['baseToken']['address'][:14]}...`\n\n"
-        return out if out else "Searching for gems..."
+        return out if out else "Searching..."
     except: return "❌ Error fetching gems."
 
 def get_whale_alerts():
-    """Statistici reale volume mari"""
-    vol = [random.randint(200000, 900000) for _ in range(3)]
+    vol = [random.randint(200000, 950000) for _ in range(3)]
     tk = ["SOL", "ETH", "PEPE", "TAO"]
     alert = "🐳 *LIVE WHALE ALERTS*\n\n"
     for v in vol:
         alert += f"⚠️ *LARGE BUY:* `${v:,.0f}` in *{random.choice(tk)}*\n🕒 Just now | ✅ Verified\n\n"
     return alert
 
-# --- FUNCȚII DEFI & AUDIT (REPARATE) ---
+# --- FUNCTII DEFI & AUDIT (REALE) ---
 
 def perform_real_audit(address):
     address = address.strip().lower()
@@ -62,7 +59,7 @@ def perform_real_audit(address):
                 own = "Renounced ✅" if d.get("owner_address") in ["", "0x0000000000000000000000000000000000000000"] else "Active ⚠️"
                 return (f"🛡️ *SECURITY AUDIT*\n`{address}`\n\n🚨 Honeypot: {hp}\n💸 Buy Tax: `{bt}`\n💸 Sell Tax: `{st}`\n👑 Owner: {own}")
         except: continue
-    return "❌ Contract not found or API busy."
+    return "❌ Contract not found or network not supported."
 
 def get_market_analysis(address):
     try:
@@ -98,7 +95,7 @@ def premium_menu():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "🚀 *Born Crypto Terminal v6.5*", reply_markup=main_menu(), parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v6.7*\n\nYour Telegram ID: `{message.chat.id}`\n(Use this ID for activation)", reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['addpremium'])
 def add_prem(message):
@@ -107,7 +104,7 @@ def add_prem(message):
             tid = message.text.split()[1]
             with open(PREMIUM_FILE, "a") as f: f.write(f"{tid}\n")
             bot.send_message(message.chat.id, f"✅ User {tid} activated!")
-            bot.send_message(tid, "🎉 *Premium Unlocked!*", reply_markup=main_menu())
+            bot.send_message(tid, "🎉 *Premium Unlocked!* Welcome to the elite.", reply_markup=main_menu())
         except: bot.reply_to(message, "Usage: /addpremium ID")
 
 @bot.message_handler(func=lambda m: True)
@@ -125,7 +122,7 @@ def router(message):
     # --- DEFI & AUDIT ---
     if text == "🛡️ DeFi Analysis":
         user_state[uid] = "waiting_defi"
-        bot.send_message(uid, "🛰️ *Send contract address for Market Analysis:*", parse_mode="Markdown")
+        bot.send_message(uid, "🛰️ *Send contract address for Analysis:*", parse_mode="Markdown")
         return
     if text == "🔍 Contract Audit":
         user_state[uid] = "waiting_audit"
@@ -141,27 +138,20 @@ def router(message):
         user_state[uid] = None
         return
 
-    # --- 5x SIGNALS (DETALIAT + LIVE PRICE) ---
+    # --- 5x SIGNALS ---
     if text == "📈 5x Signals":
         if is_premium(uid):
-            bot.send_message(uid, "⌛ *Analyzing Top Traded Volume & Live Prices...*")
-            coins = [
-                {"n": "PEPE", "t": "+150%", "a": "Bullish Pennant on 4H"},
-                {"n": "WIF", "t": "+85%", "a": "Whale accumulation detected"},
-                {"n": "SOL", "t": "+40%", "a": "Institutional buy pressure"},
-                {"n": "FET", "t": "+110%", "a": "AI Sector hype"},
-                {"n": "BONK", "t": "+200%", "a": "New exchange listing rumor"},
-                {"n": "POPCAT", "t": "+130%", "a": "Strong support at $1.20"}
-            ]
-            report = "📈 *TOP 6 TRENDING SIGNALS & LIVE PRICES*\n\n"
-            for c in coins:
-                live_p = get_live_price(c['n'])
-                report += f"🔥 *{c['n']}*\n💰 Live Price: `${live_p}`\n🎯 Target: `{c['t']}`\n🔬 Analysis: _{c['a']}_\n\n"
+            bot.send_message(uid, "⌛ *Fetching Top Signals & Live Prices...*")
+            coins = [{"n": "PEPE", "t": "+150%"}, {"n": "WIF", "t": "+85%"}, {"n": "SOL", "t": "+40%"}, {"n": "FET", "t": "+110%"}, {"n": "BONK", "t": "+200%"}, {"n": "POPCAT", "t": "+130%"}]
+            report = "📈 *TOP SIGNALS & LIVE PRICES*\n\n"
+            for c in coins: report += f"🔥 *{c['n']}*\n💰 Live: `${get_live_price(c['n'])}` | Target: `{c['t']}`\n\n"
             bot.send_message(uid, report, parse_mode="Markdown")
         else:
-            bot.send_message(uid, "❌ Locked.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK)))
+            markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK))
+            bot.send_message(uid, f"❌ Locked. Upgrade to Premium and send proof to @{ADMIN_USERNAME}", reply_markup=markup, parse_mode="Markdown")
         return
 
+    # --- ALTELE ---
     if text == "🐳 Whale Alerts":
         if is_premium(uid): bot.send_message(uid, get_whale_alerts(), parse_mode="Markdown")
         else: bot.send_message(uid, "❌ Locked.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock", url=STRIPE_PAYMENT_LINK)))
@@ -175,21 +165,23 @@ def router(message):
     # --- ABOUT IMPACTFUL ---
     if text == "ℹ️ About":
         about = (
-            "🚀 *BORN CRYPTO TERMINAL - COMPLETE GUIDE*\n\n"
-            "Stop trading blindly! Our bot provides institutional-grade data to give you the edge.\n\n"
+            "🚀 *BORN CRYPTO TERMINAL*\n"
+            "Professional institutional-grade trading bot.\n\n"
             "🟢 *FREE FUNCTIONS:*\n"
-            "🔹 *Free Signals:* Daily setups for major assets (BTC/ETH). Safe and steady.\n"
-            "🔹 *DeFi Analysis:* Send any address to see real-time Price, Liquidity, and Volume.\n"
-            "🔹 *Contract Audit:* Scan contracts for Honeypots, High Taxes, and Scams instantly.\n\n"
+            "🔹 *Free Signals:* Daily setups for major assets (BTC/ETH).\n"
+            "🔹 *DeFi Analysis:* Live Price, Liquidity, and Volume for any address.\n"
+            "🔹 *Contract Audit:* Scan for Honeypots & Scams instantly.\n\n"
             "💎 *PREMIUM FUNCTIONS (VIP):*\n"
-            "📈 *5x Signals:* The most profitable coins (PEPE, SOL, AI Gems) with entry points and LIVE Prices.\n"
-            "🐳 *Whale Alerts:* Follow the big money. See massive buys/sells as they happen.\n"
-            "💎 *Early Gems:* Find hidden low-cap jetoane on DexScreener before the pump.\n\n"
-            "✨ *BECOME A PRO TRADER TODAY!*\n"
-            "Get the unfair advantage. Information is profit."
+            "📈 *5x Signals:* Trending coins with entry points and LIVE Prices.\n"
+            "🐳 *Whale Alerts:* Follow institutional wallet movements.\n"
+            "💎 *Early Gems:* Find hidden low-caps before the pump.\n\n"
+            "✨ *READY TO WIN?*\n"
+            "Upgrade now and contact @bella.milly for VIP activation."
         )
-        btn = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 UPGRADE TO PREMIUM", url=STRIPE_PAYMENT_LINK))
-        bot.send_message(uid, about, reply_markup=btn, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔓 GET PREMIUM NOW", url=STRIPE_PAYMENT_LINK))
+        markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT @bella.milly", url=f"https://t.me/{ADMIN_USERNAME}"))
+        bot.send_message(uid, about, reply_markup=markup, parse_mode="Markdown")
         return
 
     if text == "📊 Free Signals":
