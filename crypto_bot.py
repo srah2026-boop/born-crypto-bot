@@ -8,58 +8,54 @@ import random
 # --- Configurare ---
 TOKEN = os.environ.get("TOKEN")
 ADMIN_ID = 988785764 
-ADMIN_USERNAME = "Bellamilly" # Corectat: @Bellamilly
+ADMIN_USERNAME = "Bellamilly" 
 STRIPE_PAYMENT_LINK = "https://buy.stripe.com/3cIaEX5go5CKbek0lo3cc00"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 PREMIUM_FILE = "premium_users.txt"
 user_state = {}
 
-# --- FUNCTII DATE LIVE ---
-
-def get_live_price(ticker):
-    try:
-        res = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={ticker}", timeout=5).json()
-        if res.get('pairs'): return res['pairs'][0].get('priceUsd', 'N/A')
-    except: return "N/A"
-    return "N/A"
-
-def get_real_early_gems():
-    try:
-        res = requests.get("https://api.dexscreener.com/latest/dex/search?q=WBNB", timeout=5).json()
-        pairs = res.get('pairs', [])[:3]
-        out = ""
-        for p in pairs:
-            out += f"💎 *{p['baseToken']['symbol']}*\n💰 Price: `${p['priceUsd']}`\n💧 Liq: `${p['liquidity']['usd']:,.0f}`\n📑 `{p['baseToken']['address'][:14]}...`\n\n"
-        return out if out else "Searching..."
-    except: return "❌ Error fetching gems."
-
-def get_whale_alerts():
-    vol = [random.randint(200000, 950000) for _ in range(3)]
-    tk = ["SOL", "ETH", "PEPE", "TAO"]
-    alert = "🐳 *LIVE WHALE ALERTS*\n\n"
-    for v in vol:
-        alert += f"⚠️ *LARGE BUY:* `${v:,.0f}` in *{random.choice(tk)}*\n🕒 Just now | ✅ Verified\n\n"
-    return alert
-
-# --- FUNCTII DEFI & AUDIT ---
+# --- REPARARE FINALĂ AUDIT ---
 
 def perform_real_audit(address):
     address = address.strip().lower()
+    if not address.startswith("0x"):
+        return "⚠️ *Format Invalid:* Momentan suportăm doar rețelele 0x (ETH, BSC, BASE, POLYGON)."
+    
     headers = {"User-Agent": "Mozilla/5.0"}
-    for net in ["56", "1"]:
+    # Listă extinsă de rețele: 1 (ETH), 56 (BSC), 137 (Polygon), 8453 (Base), 42161 (Arbitrum)
+    networks = ["1", "56", "8453", "137", "42161"]
+    
+    for net in networks:
         try:
             url = f"https://api.goplussecurity.io/api/v1/token_security/{net}?contract_addresses={address}"
-            res = requests.get(url, headers=headers, timeout=10).json()
+            response = requests.get(url, headers=headers, timeout=5)
+            res = response.json()
+            
+            # Verificăm dacă GoPlus a găsit contractul pe această rețea
             if res.get('code') == 1 and address in res.get('result', {}):
                 d = res['result'][address]
-                hp = "🚨 YES" if d.get("is_honeypot") == "1" else "✅ NO"
+                
+                # Traducem datele în format vizual atractiv
+                hp = "🚨 *DA*" if d.get("is_honeypot") == "1" else "✅ *NU*"
                 bt = f"{float(d.get('buy_tax', 0))*100:.1f}%"
                 st = f"{float(d.get('sell_tax', 0))*100:.1f}%"
                 own = "Renounced ✅" if d.get("owner_address") in ["", "0x0000000000000000000000000000000000000000"] else "Active ⚠️"
-                return (f"🛡️ *SECURITY AUDIT*\n`{address}`\n\n🚨 Honeypot: {hp}\n💸 Buy Tax: `{bt}`\n💸 Sell Tax: `{st}`\n👑 Owner: {own}")
-        except: continue
-    return "❌ Contract not found or network not supported."
+                
+                net_name = {"1": "Ethereum", "56": "BSC", "8453": "Base", "137": "Polygon", "42161": "Arbitrum"}.get(net)
+                
+                return (f"🛡️ *SECURITY AUDIT ({net_name})*\n`{address}`\n\n"
+                        f"🚨 Honeypot: {hp}\n"
+                        f"💸 Buy Tax: `{bt}` | Sell Tax: `{st}`\n"
+                        f"👑 Owner: {own}\n"
+                        f"🛡️ Mintable: {'No' if d.get('is_mintable')=='0' else 'Yes 🚨'}\n"
+                        f"✅ Proxy: {'No' if d.get('is_proxy')=='0' else 'Yes ⚠️'}")
+        except Exception:
+            continue # Dacă nu găsește pe o rețea, trece la următoarea
+            
+    return "❌ *Contract Not Found:* Asigură-te că adresa este corectă și moneda este listată pe un DEX."
+
+# --- FUNCȚIE DEFI (Care funcționează deja) ---
 
 def get_market_analysis(address):
     try:
@@ -67,9 +63,13 @@ def get_market_analysis(address):
         res = requests.get(url, timeout=8).json()
         if res.get('pairs'):
             p = res['pairs'][0]
-            return (f"📊 *MARKET ANALYSIS*\n`{p['baseToken']['name']} ({p['baseToken']['symbol']})`\n\n💰 Price: `${p.get('priceUsd', '0.00')}`\n💧 Liquidity: `${p.get('liquidity', {}).get('usd', 0):,.0f}`\n📈 24h Vol: `${p.get('volume', {}).get('h24', 0):,.0f}`\n🔗 [View Chart]({p['url']})")
+            return (f"📊 *MARKET ANALYSIS*\n`{p['baseToken']['name']} ({p['baseToken']['symbol']})`\n\n"
+                    f"💰 Price: `${p.get('priceUsd', '0.00')}`\n"
+                    f"💧 Liquidity: `${p.get('liquidity', {}).get('usd', 0):,.0f}`\n"
+                    f"📈 24h Vol: `${p.get('volume', {}).get('h24', 0):,.0f}`\n"
+                    f"🔗 [View Chart]({p['url']})")
     except: pass
-    return "❌ Market data unavailable."
+    return "❌ *No Market Data available.*"
 
 # --- LOGICA SISTEM ---
 
@@ -91,17 +91,9 @@ def premium_menu():
     markup.row("💎 Early Gems", "⬅️ Back")
     return markup
 
-# --- HANDLERS ---
-
 @bot.message_handler(commands=['start'])
 def start(message):
-    welcome_text = (
-        f"🚀 *Born Crypto Terminal v6.8*\n\n"
-        f"🆔 *YOUR TELEGRAM ID:* `{message.chat.id}`\n"
-        f"--------------------------------\n"
-        f"Please save this ID. You will need it for VIP activation after payment."
-    )
-    bot.send_message(message.chat.id, welcome_text, reply_markup=main_menu(), parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🚀 *Born Crypto Terminal v7.1*\n🆔 *ID:* `{message.chat.id}`", reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['addpremium'])
 def add_prem(message):
@@ -110,8 +102,7 @@ def add_prem(message):
             tid = message.text.split()[1]
             with open(PREMIUM_FILE, "a") as f: f.write(f"{tid}\n")
             bot.send_message(message.chat.id, f"✅ User {tid} activated!")
-            bot.send_message(tid, "🎉 *Premium Unlocked!* Welcome to the elite.", reply_markup=main_menu())
-        except: bot.reply_to(message, "Usage: /addpremium ID")
+        except: pass
 
 @bot.message_handler(func=lambda m: True)
 def router(message):
@@ -119,20 +110,20 @@ def router(message):
     text = message.text
 
     if text == "💎 PREMIUM":
-        bot.send_message(uid, "💎 *Premium Terminal Access*", reply_markup=premium_menu(), parse_mode="Markdown")
+        bot.send_message(uid, "💎 *Premium Access*", reply_markup=premium_menu(), parse_mode="Markdown")
         return
     if text == "⬅️ Back":
         bot.send_message(uid, "🏠 *Main Menu*", reply_markup=main_menu(), parse_mode="Markdown")
         return
 
-    # --- DEFI & AUDIT ---
+    # --- INPUT ADRESE ---
     if text == "🛡️ DeFi Analysis":
         user_state[uid] = "waiting_defi"
-        bot.send_message(uid, "🛰️ *Send contract address for Analysis:*", parse_mode="Markdown")
+        bot.send_message(uid, "🛰️ *Trimite adresa contractului:*", parse_mode="Markdown")
         return
     if text == "🔍 Contract Audit":
         user_state[uid] = "waiting_audit"
-        bot.send_message(uid, "🔍 *Send contract address for Security Scan:*", parse_mode="Markdown")
+        bot.send_message(uid, "🔍 *Trimite adresa pentru scanare:*", parse_mode="Markdown")
         return
 
     if user_state.get(uid) == "waiting_defi" and text.startswith("0x"):
@@ -144,54 +135,11 @@ def router(message):
         user_state[uid] = None
         return
 
-    # --- 5x SIGNALS ---
-    if text == "📈 5x Signals":
-        if is_premium(uid):
-            bot.send_message(uid, "⌛ *Fetching Top Signals & Live Prices...*")
-            coins = [{"n": "PEPE", "t": "+150%"}, {"n": "WIF", "t": "+85%"}, {"n": "SOL", "t": "+40%"}, {"n": "FET", "t": "+110%"}, {"n": "BONK", "t": "+200%"}, {"n": "POPCAT", "t": "+130%"}]
-            report = "📈 *TOP SIGNALS & LIVE PRICES*\n\n"
-            for c in coins: report += f"🔥 *{c['n']}*\n💰 Live: `${get_live_price(c['n'])}` | Target: `{c['t']}`\n\n"
-            bot.send_message(uid, report, parse_mode="Markdown")
-        else:
-            markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock Now", url=STRIPE_PAYMENT_LINK))
-            bot.send_message(uid, f"❌ Locked. Upgrade to Premium and send proof to @{ADMIN_USERNAME}", reply_markup=markup, parse_mode="Markdown")
-        return
-
-    # --- ALTELE ---
-    if text == "🐳 Whale Alerts":
-        if is_premium(uid): bot.send_message(uid, get_whale_alerts(), parse_mode="Markdown")
-        else: bot.send_message(uid, "❌ Locked.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock", url=STRIPE_PAYMENT_LINK)))
-        return
-
-    if text == "💎 Early Gems":
-        if is_premium(uid): bot.send_message(uid, get_real_early_gems(), parse_mode="Markdown")
-        else: bot.send_message(uid, "❌ Locked.", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔓 Unlock", url=STRIPE_PAYMENT_LINK)))
-        return
-
-    # --- ABOUT (CU CONTACT CORECTAT) ---
     if text == "ℹ️ About":
-        about = (
-            "🚀 *BORN CRYPTO TERMINAL*\n"
-            "Professional institutional-grade trading bot.\n\n"
-            "🟢 *FREE FUNCTIONS:*\n"
-            "🔹 *Free Signals:* Daily setups for major assets (BTC/ETH).\n"
-            "🔹 *DeFi Analysis:* Live Price, Liquidity, and Volume.\n"
-            "🔹 *Contract Audit:* Scan for Honeypots & Scams.\n\n"
-            "💎 *PREMIUM FUNCTIONS (VIP):*\n"
-            "📈 *5x Signals:* Trending coins with entry points and LIVE Prices.\n"
-            "🐳 *Whale Alerts:* Follow institutional wallet movements.\n"
-            "💎 *Early Gems:* Find hidden low-caps before the pump.\n\n"
-            "✨ *READY TO WIN?*\n"
-            "Upgrade now and contact @Bellamilly for VIP activation."
-        )
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔓 GET PREMIUM NOW", url=STRIPE_PAYMENT_LINK))
         markup.add(types.InlineKeyboardButton("👨‍💻 CONTACT @Bellamilly", url=f"https://t.me/{ADMIN_USERNAME}"))
-        bot.send_message(uid, about, reply_markup=markup, parse_mode="Markdown")
-        return
-
-    if text == "📊 Free Signals":
-        bot.send_message(uid, "📊 *FREE SIGNAL*\nToken: *ETH/USDT*\nTarget: $2480\nStatus: ✅ Active")
+        bot.send_message(uid, "🚀 *BORN CRYPTO TERMINAL*\nProfessional DeFi suite.", reply_markup=markup, parse_mode="Markdown")
 
 if __name__ == "__main__":
     bot.remove_webhook()
